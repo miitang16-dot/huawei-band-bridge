@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Bridge" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorAccent">#EE8CA5</item>
+        <item name="android:colorControlActivated">#EE8CA5</item>
+        <item name="android:windowBackground">@color/bridge_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+    <color name="bridge_bg">#131013</color>
+</resources>

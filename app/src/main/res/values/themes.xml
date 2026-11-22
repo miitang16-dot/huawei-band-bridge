@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Views are styled in code (Ui.java); the theme only sets the window ground and the accent
+         used by switches, text cursors and selection handles. -->
+    <style name="Bridge" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:colorAccent">#D25C7A</item>
+        <item name="android:colorControlActivated">#D25C7A</item>
+        <item name="android:windowBackground">@color/bridge_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+    <color name="bridge_bg">#F6F2F3</color>
+    <color name="bridge_icon_bg">#D25C7A</color>
+</resources>

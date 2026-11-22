@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar icon: the same band + heartbeat as the launcher icon, at 24dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFF" android:strokeWidth="1.8"
+        android:pathData="M8.5,2.5 L15.5,2.5 A3,3 0 0 1 18.5,5.5 L18.5,18.5 A3,3 0 0 1 15.5,21.5 L8.5,21.5 A3,3 0 0 1 5.5,18.5 L5.5,5.5 A3,3 0 0 1 8.5,2.5 Z" />
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFF" android:strokeWidth="1.6"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M7.5,12.5 L9.6,12.5 L10.8,9.5 L12.8,15.5 L14,11.8 L16.5,11.8" />
+</vector>

@@ -171,7 +171,7 @@ public class BandService extends Service {
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE);
         PendingIntent stop = PendingIntent.getService(this, 1, new Intent(this, BandService.class).setAction("stop"), PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, CH)
-                .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+                .setSmallIcon(R.drawable.ic_stat)
                 .setContentTitle("手环桥")
                 .setContentText(text)
                 .setContentIntent(pi)

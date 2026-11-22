@@ -7,21 +7,18 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.text.InputType;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.Button;
 import android.widget.EditText;
+import android.widget.GridLayout;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -40,147 +37,52 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-/** One screen: connection, heartbeat live view, stress calibration, MCP address + token, music access, profile, log. Plain views, no libraries. */
+/**
+ * Main screen. Top to bottom: the connection card (the one emphasised block), a link to the
+ * health page, heartbeat live, band features, the MCP server, profile, data and log.
+ * Built with {@link Ui}; plain framework views, no libraries.
+ */
 public class MainActivity extends Activity {
 
     private final Handler h = new Handler(Looper.getMainLooper());
-    private TextView state, data, mcpInfo, calibTxt, musicTxt, log, exportTxt, hrTxt;
-    private Button connectBtn, mcpBtn, calibBtn, hr1Btn, hr3Btn, hrStopBtn;
-    private boolean showToken = false;
-    private int ink, sub, card, accent;
+    private Ui ui;
 
-    private int dp(float v) { return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, getResources().getDisplayMetrics()); }
+    /* connection */
+    private TextView connPill, connTitle, connMeta, connHint, connBtn, syncBtn;
+    /* health link */
+    private TextView healthSub;
+    private volatile boolean healthLoading;
+    /* heartbeat live */
+    private TextView hrBpm, hrUnit, hrState, hrFoot, hrHelp, hr1Btn, hr3Btn, hrStopBtn;
+    private TextView[] hrStat = new TextView[6];
+    /* features */
+    private TextView calibSub, calibBtn, musicSub, musicBtn;
+    /* MCP */
+    private Switch mcpSwitch;
+    private TextView mcpPill, mcpAddr, mcpToken, mcpTokenBtn;
+    private boolean showToken = false;
+    /* data */
+    private TextView exportSub, logView, logToggle;
+    private boolean logOpen = false;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
-        boolean dark = (getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES;
-        ink = dark ? 0xFFF1ECEE : 0xFF2B2326; sub = dark ? 0xFFA79CA1 : 0xFF7A6E73; card = dark ? 0xFF221D21 : 0xFFFFFFFF; accent = 0xFFE58FA6;
-        int bg = dark ? 0xFF16131F : 0xFFFBF2F5;
-        getWindow().setStatusBarColor(bg);
+        ui = new Ui(this);
+        Ui.Screen s = ui.screen();
+        ui.barTitle(s, "手环桥", false);
+        LinearLayout col = s.body;
 
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(dp(16), dp(20), dp(16), dp(32));
-        ScrollView sv = new ScrollView(this);
-        sv.setBackgroundColor(bg);
-        sv.addView(col);
-        setContentView(sv);
+        buildConnection(col);
+        buildHealthLink(col);
+        buildHrLive(col);
+        buildFeatures(col);
+        buildMcp(col);
+        buildProfile(col);
+        buildData(col);
 
-        TextView title = text("手环桥", 26, ink, true);
-        col.addView(title);
-        TextView tag = text("让 AI 直接读你的华为手环 · 不用华为 App、不用账号、数据不出手机", 13, sub, false);
-        tag.setPadding(0, dp(4), 0, dp(12));
-        col.addView(tag);
-
-        /* 健康页（和 Nexus 健康页同一套视觉）：横幅 / 六块概览 / 图表 */
-        LinearLayout health = new LinearLayout(this);
-        health.setOrientation(LinearLayout.VERTICAL);
-        health.setPadding(dp(16), dp(14), dp(16), dp(16));
-        Charts.PanelBg healthBg = new Charts.PanelBg(card, Color.argb(28, 120, 80, 95), 1, 20, getResources().getDisplayMetrics().density);
-        healthBg.setHeroTints(Charts.Palette.HR, Charts.Palette.SLEEP);
-        health.setBackground(healthBg);
-        LinearLayout healthTop = new LinearLayout(this);
-        healthTop.setOrientation(LinearLayout.HORIZONTAL);
-        healthTop.addView(text("健康", 18, ink, true));
-        healthTop.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
-        healthTop.addView(text("›", 22, sub, false));
-        health.addView(healthTop);
-        health.addView(text("心率 · 血氧 · 步数 · 睡眠 · 压力 · 情绪 —— 今天的数据，和 Nexus 健康页同一套", 12, sub, false));
-        health.setOnClickListener(v -> startActivity(new Intent(this, HealthActivity.class)));
-        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(-1, -2);
-        hlp.topMargin = dp(2);
-        col.addView(health, hlp);
-
-        /* 连接 */
-        LinearLayout c1 = card(col, "手环");
-        state = text("", 15, ink, true); c1.addView(state);
-        data = text("", 13, sub, false); c1.addView(data);
-        connectBtn = button(c1, "连接", v -> toggleConnect());
-        button(c1, "立即同步", v -> { BandService s = BandService.instance; if (s != null && s.session != null) s.session.syncNow(); });
-        c1.addView(note("第一次用之前：手环要先和「华为运动健康」解绑（App 里删除设备，或手环恢复出厂），两边不能同时连。"));
-
-        /* 心跳直播 */
-        LinearLayout ch = card(col, "心跳直播（逐拍心率）");
-        ch.addView(note("手环里还有一路「逐拍」数据（RRI）：能算出一拍一拍的心率，比每分钟一格细得多。"
-                + "按一下测 1 分钟，戴紧、别说话；能不能连着开更久还没上真机验证。"));
-        hrTxt = text("", 13, ink, false);
-        hrTxt.setTextIsSelectable(true);
-        ch.addView(hrTxt);
-        hr1Btn = button(ch, "开始（1 分钟）", v -> startHrLive(HrLiveSession.DEFAULT_SECONDS));
-        hr3Btn = button(ch, "试 3 分钟（未验证手环肯开这么久）", v -> startHrLive(180));
-        hrStopBtn = button(ch, "停", v -> {
-            BandService s = BandService.instance;
-            if (s != null && s.session != null) s.session.hrLiveStop();
-        });
-        ch.addView(note("lag = 包到达时间 − 最后一拍的时间。≈0 ms 与「逐拍实时推送」相符；但单凭 lag 不能排除手环在 ≤1 个包内做缓冲 / 成对推送。lag 大就说明在补几秒前的数据。"));
-        ch.addView(note("「丢」是手环标为无效的样本：sqi=0（它自己说这一拍不可信），或间期 <250 ms / >3000 ms（漏拍、断拍、手没贴住）。不是漏掉的心跳。"));
-
-        /* 压力 */
-        LinearLayout c2 = card(col, "压力校准");
-        c2.addView(note("手环要先「认识」一次你安静时的心跳，才会开始自动测压力。戴紧手环、坐着别动别说话 1 分钟。"));
-        calibTxt = text("", 13, ink, false); c2.addView(calibTxt);
-        calibBtn = button(c2, "开始校准（1 分钟）", v -> {
-            BandService s = BandService.instance;
-            if (s == null || s.session == null || !s.session.calibrateStress()) toast("手环还没连上");
-        });
-
-        /* MCP */
-        LinearLayout c3 = card(col, "MCP 服务（给 AI 用）");
-        mcpInfo = text("", 13, ink, false); mcpInfo.setTextIsSelectable(true); c3.addView(mcpInfo);
-        mcpBtn = button(c3, "", v -> toggleMcp());
-        button(c3, "复制配置", v -> copyConfig());
-        button(c3, "显示 / 隐藏口令", v -> { showToken = !showToken; refresh(); });
-        button(c3, "换一个口令", v -> { BandService.newToken(this); BandService s = BandService.instance; if (s != null) s.restartMcp(); refresh(); toast("旧口令已作废"); });
-        c3.addView(note("AI 和手机要在同一个 Wi-Fi 下（或用 Tailscale 之类的组网）。口令就是钥匙，别发给不认识的人。"));
-
-        /* 音乐 */
-        LinearLayout c4 = card(col, "手环音乐页");
-        musicTxt = text("", 13, ink, false); c4.addView(musicTxt);
-        button(c4, "去开「通知使用权」", v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
-        c4.addView(note("不开也能用手环切歌 / 暂停，只是手环上不显示歌名。本 App 不读取、不保存任何通知内容。"));
-
-        /* 天气 */
-        LinearLayout c5 = card(col, "天气地名");
-        EditText place = input(c5, "手环上显示的地名（比如 东京）", getSharedPreferences(WeatherFetch.SP, MODE_PRIVATE).getString("place", ""), InputType.TYPE_CLASS_TEXT);
-        button(c5, "保存", v -> {
-            getSharedPreferences(WeatherFetch.SP, MODE_PRIVATE).edit().putString("place", place.getText().toString().trim()).putLong("at", 0).apply();
-            BandService s = BandService.instance; if (s != null && s.session != null) s.session.weatherChanged();
-            toast("好了，下次送天气时用这个名字");
-        });
-        c5.addView(note("天气来自 Open-Meteo，只发送大概位置（约 10 公里精度）。"));
-
-        /* 资料 */
-        LinearLayout c6 = card(col, "个人资料（手环算卡路里、压力用）");
-        SharedPreferences sp = getSharedPreferences(BandService.SP, MODE_PRIVATE);
-        EditText hgt = input(c6, "身高 cm", sp.getInt("height", 0) > 0 ? String.valueOf(sp.getInt("height", 0)) : "", InputType.TYPE_CLASS_NUMBER);
-        EditText wgt = input(c6, "体重 kg", sp.getFloat("weight", 0) > 0 ? String.valueOf(sp.getFloat("weight", 0)) : "", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        EditText bd = input(c6, "生日 YYYY-MM-DD", sp.getString("birthday", ""), InputType.TYPE_CLASS_DATETIME);
-        EditText gd = input(c6, "性别：女 / 男", sp.getInt("gender", 2) == 1 ? "男" : "女", InputType.TYPE_CLASS_TEXT);
-        button(c6, "保存并发给手环", v -> {
-            try {
-                sp.edit().putInt("height", Integer.parseInt(hgt.getText().toString().trim()))
-                        .putFloat("weight", Float.parseFloat(wgt.getText().toString().trim()))
-                        .putString("birthday", bd.getText().toString().trim())
-                        .putInt("gender", gd.getText().toString().contains("男") ? 1 : 2).apply();
-                BandService s = BandService.instance; if (s != null && s.session != null) s.session.profileChanged();
-                toast("存好了（只存在这台手机上）");
-            } catch (Throwable t) { toast("填得不对，检查一下数字和日期格式"); }
-        });
-
-        /* 导出 */
-        LinearLayout c7 = card(col, "导出数据");
-        exportTxt = text("把本机存档导出成 JSON（原样打包）+ CSV（按日期摊平，Excel 能开）。只写本机，不上传。", 13, ink, false);
-        exportTxt.setTextIsSelectable(true);
-        c7.addView(exportTxt);
-        button(c7, "导出 JSON + CSV", v -> exportData());
-        c7.addView(note("Android 10+ 写到「Download/HuaweiBandBridge」；Android 8/9 写到 App 自己的外部目录（都不用存储权限）。"));
-
-        /* 日志 */
-        LinearLayout c8 = card(col, "日志（排查问题用，只在本机）");
-        log = text("", 11, sub, false);
-        log.setTypeface(Typeface.MONOSPACE);
-        log.setTextIsSelectable(true);
-        c8.addView(log);
+        TextView foot = ui.small("手环桥 " + BuildInfo.VERSION + " · AGPL-3.0 · 不是华为官方应用，数据只存在这台手机上");
+        foot.setPadding(ui.dp(4), ui.dp(24), ui.dp(4), 0);
+        col.addView(foot);
 
         askPermissions();
     }
@@ -188,6 +90,312 @@ public class MainActivity extends Activity {
     @Override protected void onResume() { super.onResume(); BandService.ui = () -> h.post(this::refresh); refresh(); h.postDelayed(tick, 5000); }
     @Override protected void onPause() { super.onPause(); BandService.ui = null; h.removeCallbacks(tick); }
     private final Runnable tick = new Runnable() { @Override public void run() { refresh(); h.postDelayed(this, 5000); } };
+
+    /* ── build ─────────────────────────────────────────────────────────────── */
+
+    private void buildConnection(LinearLayout col) {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setPadding(ui.dp(18), ui.dp(16), ui.dp(18), ui.dp(18));
+        Charts.PanelBg bg = new Charts.PanelBg(ui.t.surface, ui.t.line, 0.75f, 20, getResources().getDisplayMetrics().density);
+        bg.setHeroTints(ui.t.accent, Charts.Palette.SLEEP);
+        c.setBackground(bg);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = ui.dp(8);
+        col.addView(c, lp);
+
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        connPill = ui.pill("", ui.t.faint);
+        top.addView(connPill);
+        c.addView(top);
+
+        connTitle = ui.text("", 24, ui.t.ink, Ui.BOLD);
+        connTitle.setPadding(0, ui.dp(14), 0, 0);
+        c.addView(connTitle);
+        connMeta = ui.meta("");
+        connMeta.setPadding(0, ui.dp(6), 0, 0);
+        c.addView(connMeta);
+
+        connBtn = ui.primary("连接", v -> toggleConnect());
+        syncBtn = ui.tonal("立即同步", v -> {
+            BandService s = BandService.instance;
+            if (s != null && s.session != null && s.session.isReady()) { s.session.syncNow(); toast("在同步了"); }
+            else toast("手环还没连上");
+        });
+        ui.buttons(c, syncBtn, connBtn);
+
+        connHint = ui.small("第一次用：先在「华为运动健康」里删除这个手环（或把手环恢复出厂）。两个 App 不能同时连着它。");
+        connHint.setPadding(0, ui.dp(12), 0, 0);
+        c.addView(connHint);
+    }
+
+    private void buildHealthLink(LinearLayout col) {
+        LinearLayout g = ui.group(col);
+        ((LinearLayout.LayoutParams) g.getLayoutParams()).topMargin = ui.dp(12);
+        Ui.Chevron chev = new Ui.Chevron(this, ui.t.faint, false);
+        chev.setMinimumWidth(ui.dp(16));
+        chev.setMinimumHeight(ui.dp(16));
+        healthSub = ui.row(g, "健康", "心率、血氧、步数、睡眠、压力和情绪", chev,
+                v -> startActivity(new Intent(this, HealthActivity.class)));
+    }
+
+    private void buildHrLive(LinearLayout col) {
+        ui.section(col, "心跳直播");
+        LinearLayout c = ui.card(col);
+
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.BOTTOM);
+        hrBpm = ui.text("—", 44, ui.t.ink, Ui.BOLD);
+        top.addView(hrBpm);
+        hrUnit = ui.text(" bpm", 14, ui.t.sub, null);
+        hrUnit.setPadding(0, 0, 0, ui.dp(7));
+        top.addView(hrUnit);
+        top.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+        hrState = ui.pill("", ui.t.faint);
+        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(-2, -2);
+        plp.bottomMargin = ui.dp(8);
+        top.addView(hrState, plp);
+        c.addView(top);
+
+        TextView lead = ui.meta("手环一拍一拍推送心跳间隔，换算成心率。比每分钟一格细得多，测的时候戴紧、坐着别说话。");
+        lead.setPadding(0, ui.dp(6), 0, 0);
+        c.addView(lead);
+
+        GridLayout grid = new GridLayout(this);
+        grid.setColumnCount(3);
+        String[] labels = {"有效拍", "丢弃样本", "每包样本", "lag", "最近一拍", "首包"};
+        for (int i = 0; i < 6; i++) {
+            LinearLayout cell = new LinearLayout(this);
+            cell.setOrientation(LinearLayout.VERTICAL);
+            cell.setPadding(0, ui.dp(12), ui.dp(8), 0);
+            hrStat[i] = ui.text("—", 17, ui.t.ink, Ui.MEDIUM);
+            cell.addView(hrStat[i]);
+            TextView l = ui.small(labels[i]);
+            l.setPadding(0, ui.dp(3), 0, 0);
+            cell.addView(l);
+            GridLayout.LayoutParams glp = new GridLayout.LayoutParams(GridLayout.spec(i / 3), GridLayout.spec(i % 3, 1f));
+            glp.width = 0;
+            grid.addView(cell, glp);
+        }
+        LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(-1, -2);
+        glp.topMargin = ui.dp(4);
+        c.addView(grid, glp);
+
+        hrFoot = ui.small("");
+        hrFoot.setPadding(0, ui.dp(12), 0, 0);
+        c.addView(hrFoot);
+
+        hr1Btn = ui.primary("测 1 分钟", v -> startHrLive(HrLiveSession.DEFAULT_SECONDS));
+        hr3Btn = ui.tonal("3 分钟", v -> startHrLive(180));
+        hrStopBtn = ui.tonal("停止", v -> {
+            BandService s = BandService.instance;
+            if (s != null && s.session != null) s.session.hrLiveStop();
+        });
+        LinearLayout row = ui.buttons(c, hr1Btn, hr3Btn, hrStopBtn);
+        ((LinearLayout.LayoutParams) hr1Btn.getLayoutParams()).weight = 1.4f;
+
+        hrHelp = ui.small("丢弃样本：手环自己标为无效的（sqi=0），或者间隔小于 250 ms、大于 3000 ms 的。它们不是漏掉的心跳。\n"
+                + "lag：包到达的时间减去最后一拍的时间。约等于 0 说明和逐拍实时推送相符，但不能排除手环在一个包里攒了一两拍再发。\n"
+                + "3 分钟档在 Band 10 上测通过一次，其它型号没试过。");
+        hrHelp.setLineSpacing(0, 1.4f);
+        hrHelp.setPadding(0, ui.dp(10), 0, 0);
+        hrHelp.setVisibility(View.GONE);
+        TextView more = ui.text("这些数字是什么意思", 13, ui.t.accent, Ui.MEDIUM);
+        more.setPadding(0, ui.dp(14), 0, ui.dp(2));
+        more.setOnClickListener(v -> {
+            boolean open = hrHelp.getVisibility() != View.VISIBLE;
+            hrHelp.setVisibility(open ? View.VISIBLE : View.GONE);
+            more.setText(open ? "收起说明" : "这些数字是什么意思");
+        });
+        c.addView(more);
+        c.addView(hrHelp);
+    }
+
+    private void buildFeatures(LinearLayout col) {
+        ui.section(col, "手环功能");
+        LinearLayout g = ui.group(col);
+
+        calibBtn = ui.chipButton("校准", v -> {
+            BandService s = BandService.instance;
+            if (s == null || s.session == null || !s.session.calibrateStress()) toast("手环还没连上");
+        });
+        calibSub = ui.row(g, "压力校准", "", calibBtn, null);
+
+        musicBtn = ui.chipButton("去开启", v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
+        musicSub = ui.row(g, "手环音乐页", "", musicBtn, null);
+
+        ui.hairline(g);
+        LinearLayout wx = new LinearLayout(this);
+        wx.setOrientation(LinearLayout.VERTICAL);
+        wx.setPadding(ui.dp(16), ui.dp(14), ui.dp(16), ui.dp(16));
+        wx.addView(ui.text("天气", 15, ui.t.ink, Ui.MEDIUM));
+        TextView ws = ui.meta("从 Open-Meteo 获取，只发送约 10 公里精度的位置。下面的名字会显示在手环上。");
+        ws.setPadding(0, ui.dp(3), 0, ui.dp(12));
+        wx.addView(ws);
+        LinearLayout line = new LinearLayout(this);
+        line.setGravity(Gravity.BOTTOM);
+        LinearLayout fieldBox = new LinearLayout(this);
+        fieldBox.setOrientation(LinearLayout.VERTICAL);
+        EditText place = ui.field(fieldBox, "地名", "比如 东京", getSharedPreferences(WeatherFetch.SP, MODE_PRIVATE).getString("place", ""), InputType.TYPE_CLASS_TEXT);
+        line.addView(fieldBox, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView save = ui.tonal("保存", v -> {
+            getSharedPreferences(WeatherFetch.SP, MODE_PRIVATE).edit().putString("place", place.getText().toString().trim()).putLong("at", 0).apply();
+            BandService s = BandService.instance; if (s != null && s.session != null) s.session.weatherChanged();
+            toast("保存好了，下次给手环送天气时用这个名字");
+        });
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-2, -2);
+        slp.leftMargin = ui.dp(8);
+        line.addView(save, slp);
+        wx.addView(line);
+        g.addView(wx);
+    }
+
+    private void buildMcp(LinearLayout col) {
+        ui.section(col, "给 AI 用 · MCP 服务");
+        LinearLayout c = ui.card(col);
+
+        LinearLayout top = new LinearLayout(this);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout tl = new LinearLayout(this);
+        tl.setOrientation(LinearLayout.VERTICAL);
+        tl.addView(ui.text("MCP 服务", 15, ui.t.ink, Ui.MEDIUM));
+        mcpPill = ui.meta("");
+        mcpPill.setPadding(0, ui.dp(3), 0, 0);
+        tl.addView(mcpPill);
+        top.addView(tl, new LinearLayout.LayoutParams(0, -2, 1f));
+        mcpSwitch = new Switch(this);
+        mcpSwitch.setOnClickListener(v -> toggleMcp());
+        top.addView(mcpSwitch);
+        c.addView(top);
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(12));
+        box.setBackground(ui.round(ui.t.surface2, 12));
+        TextView al = ui.small("地址");
+        box.addView(al);
+        mcpAddr = ui.text("", 13, ui.t.ink, Ui.MONO);
+        mcpAddr.setTextIsSelectable(true);
+        mcpAddr.setPadding(0, ui.dp(3), 0, ui.dp(10));
+        box.addView(mcpAddr);
+        LinearLayout tr = new LinearLayout(this);
+        tr.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout tcol = new LinearLayout(this);
+        tcol.setOrientation(LinearLayout.VERTICAL);
+        tcol.addView(ui.small("口令"));
+        mcpToken = ui.text("", 13, ui.t.ink, Ui.MONO);
+        mcpToken.setTextIsSelectable(true);
+        mcpToken.setPadding(0, ui.dp(3), 0, 0);
+        tcol.addView(mcpToken);
+        tr.addView(tcol, new LinearLayout.LayoutParams(0, -2, 1f));
+        mcpTokenBtn = ui.text("显示", 13, ui.t.accent, Ui.MEDIUM);
+        mcpTokenBtn.setPadding(ui.dp(12), ui.dp(8), ui.dp(4), ui.dp(8));
+        mcpTokenBtn.setOnClickListener(v -> { showToken = !showToken; refresh(); });
+        tr.addView(mcpTokenBtn);
+        box.addView(tr);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-1, -2);
+        blp.topMargin = ui.dp(14);
+        c.addView(box, blp);
+
+        ui.buttons(c,
+                ui.primary("复制配置", v -> copyConfig()),
+                ui.tonal("换一个口令", v -> {
+                    BandService.newToken(this);
+                    BandService s = BandService.instance; if (s != null) s.restartMcp();
+                    refresh(); toast("旧口令已作废，记得更新 AI 客户端里的配置");
+                }));
+        TextView n = ui.small("电脑和手机要连同一个 Wi-Fi（或者用 Tailscale 这类组网）。口令等于钥匙，不要发给别人；不要把端口开到公网。");
+        n.setPadding(0, ui.dp(12), 0, 0);
+        c.addView(n);
+    }
+
+    private void buildProfile(LinearLayout col) {
+        ui.section(col, "个人资料");
+        LinearLayout c = ui.card(col);
+        TextView lead = ui.meta("手环用它估算卡路里和压力。只存在这台手机上，也会发给手环。");
+        c.addView(lead);
+        SharedPreferences sp = getSharedPreferences(BandService.SP, MODE_PRIVATE);
+
+        GridLayout grid = new GridLayout(this);
+        grid.setColumnCount(2);
+        EditText[] f = new EditText[3];
+        LinearLayout[] cells = new LinearLayout[4];
+        for (int i = 0; i < 4; i++) {
+            cells[i] = new LinearLayout(this);
+            cells[i].setOrientation(LinearLayout.VERTICAL);
+            GridLayout.LayoutParams glp = new GridLayout.LayoutParams(GridLayout.spec(i / 2), GridLayout.spec(i % 2, 1f));
+            glp.width = 0;
+            glp.topMargin = ui.dp(14);
+            if (i % 2 == 0) glp.rightMargin = ui.dp(6); else glp.leftMargin = ui.dp(6);
+            grid.addView(cells[i], glp);
+        }
+        f[0] = ui.field(cells[0], "身高（cm）", "160", sp.getInt("height", 0) > 0 ? String.valueOf(sp.getInt("height", 0)) : "", InputType.TYPE_CLASS_NUMBER);
+        f[1] = ui.field(cells[1], "体重（kg）", "50", sp.getFloat("weight", 0) > 0 ? trimFloat(sp.getFloat("weight", 0)) : "", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        f[2] = ui.field(cells[2], "生日", "2008-05-20", sp.getString("birthday", ""), InputType.TYPE_CLASS_DATETIME | InputType.TYPE_DATETIME_VARIATION_DATE);
+
+        // gender: two-option segmented control
+        TextView gl = ui.text("性别", 12, ui.t.sub, Ui.MEDIUM);
+        gl.setPadding(ui.dp(2), 0, 0, ui.dp(6));
+        cells[3].addView(gl);
+        LinearLayout seg = new LinearLayout(this);
+        seg.setPadding(ui.dp(3), ui.dp(3), ui.dp(3), ui.dp(3));
+        seg.setBackground(ui.round(ui.t.surface2, 12));
+        final int[] gender = {sp.getInt("gender", 2)};
+        TextView fem = ui.text("女", 15, ui.t.ink, Ui.MEDIUM), male = ui.text("男", 15, ui.t.ink, Ui.MEDIUM);
+        TextView[] opts = {fem, male};
+        Runnable paint = () -> {
+            for (int i = 0; i < 2; i++) {
+                boolean on = (i == 0 && gender[0] != 1) || (i == 1 && gender[0] == 1);
+                opts[i].setBackground(on ? ui.round(ui.t.surface, 9) : null);
+                opts[i].setTextColor(on ? ui.t.ink : ui.t.sub);
+            }
+        };
+        for (int i = 0; i < 2; i++) {
+            final int val = i == 0 ? 2 : 1;
+            opts[i].setGravity(Gravity.CENTER);
+            opts[i].setMinHeight(ui.dp(40));
+            opts[i].setOnClickListener(v -> { gender[0] = val; paint.run(); });
+            seg.addView(opts[i], new LinearLayout.LayoutParams(0, -2, 1f));
+        }
+        paint.run();
+        cells[3].addView(seg, new LinearLayout.LayoutParams(-1, -2));
+        c.addView(grid, new LinearLayout.LayoutParams(-1, -2));
+
+        ui.buttons(c, ui.tonal("保存并发给手环", v -> {
+            try {
+                String bd = f[2].getText().toString().trim();
+                if (!bd.matches("\\d{4}-\\d{2}-\\d{2}")) throw new IllegalArgumentException();
+                sp.edit().putInt("height", Integer.parseInt(f[0].getText().toString().trim()))
+                        .putFloat("weight", Float.parseFloat(f[1].getText().toString().trim()))
+                        .putString("birthday", bd)
+                        .putInt("gender", gender[0]).apply();
+                BandService s = BandService.instance; if (s != null && s.session != null) s.session.profileChanged();
+                toast("保存好了");
+            } catch (Throwable t) { toast("身高、体重要填数字，生日写成 2008-05-20 这样"); }
+        }));
+    }
+
+    private void buildData(LinearLayout col) {
+        ui.section(col, "数据");
+        LinearLayout g = ui.group(col);
+        exportSub = ui.row(g, "导出数据", "导出成 JSON 和 CSV（Excel 能打开），只写在手机里",
+                ui.chipButton("导出", v -> exportData()), null);
+
+        logToggle = ui.text("展开", 13, ui.t.accent, Ui.MEDIUM);
+        ui.row(g, "日志", "排查问题用，只在内存里，退出就清空", logToggle, v -> {
+            logOpen = !logOpen;
+            logView.setVisibility(logOpen ? View.VISIBLE : View.GONE);
+            logToggle.setText(logOpen ? "收起" : "展开");
+            refresh();
+        });
+        logView = ui.text("", 11, ui.t.sub, Ui.MONO);
+        logView.setTextIsSelectable(true);
+        logView.setLineSpacing(0, 1.35f);
+        logView.setPadding(ui.dp(16), 0, ui.dp(16), ui.dp(16));
+        logView.setVisibility(View.GONE);
+        g.addView(logView);
+    }
 
     /* ── actions ── */
 
@@ -209,32 +417,29 @@ public class MainActivity extends Activity {
         refresh();
     }
 
-    /** 开始一次心跳直播（0x19 逐拍流）。立刻返回，进度靠 refresh() 读快照。 */
+    /** Start one heartbeat-live run (0x19 RRI stream). Returns at once; refresh() reads the snapshot. */
     private void startHrLive(int seconds) {
         BandService s = BandService.instance;
         if (s == null || s.session == null) { toast("手环还没连上"); return; }
-        if (!s.session.isReady()) { toast("还在连，等状态变成「已连接」再点"); return; }
+        if (!s.session.isReady()) { toast("还在连接，等显示「已连接」再试"); return; }
         if (!s.session.hrLiveStart(seconds)) { toast("已经在测了"); return; }
-        toast("开始了：安静坐着，让它测完这 " + seconds + " 秒");
+        toast("开始了，坐着别动，测 " + seconds + " 秒");
         refresh();
     }
 
-    /** 导出本机存档（JSON + CSV）。读文件 + 写下载目录都在工作线程，UI 只更新结果文字。 */
+    /** Export the local stores (JSON + CSV) on a worker thread. */
     private void exportData() {
-        exportTxt.setText("导出中…");
+        exportSub.setText("导出中…");
         new Thread(() -> {
             try {
                 DataExport.Result result = DataExport.export(this);
                 runOnUiThread(() -> {
-                    exportTxt.setText(result.summary());
+                    exportSub.setText(result.summary());
                     toast(result.written.isEmpty() ? "还没有数据可导出" : "导出好了");
                 });
             } catch (Throwable t) {
                 String message = String.valueOf(t);
-                runOnUiThread(() -> {
-                    exportTxt.setText("导出失败：" + message);
-                    toast("导出失败，换到「日志」看原因");
-                });
+                runOnUiThread(() -> { exportSub.setText("导出失败：" + message); toast("导出失败，原因在日志里"); });
             }
         }, "band-export").start();
     }
@@ -247,7 +452,7 @@ public class MainActivity extends Activity {
                     .put("type", "http").put("url", url)
                     .put("headers", new JSONObject().put("Authorization", "Bearer " + BandService.token(this)))));
             ((ClipboardManager) getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("mcp", cfg.toString(2)));
-            toast("已复制（里面有口令，别乱发）");
+            toast("复制好了，里面有口令，只粘到你自己的 AI 客户端");
         } catch (Throwable ignored) { }
     }
 
@@ -279,38 +484,111 @@ public class MainActivity extends Activity {
 
     private void refresh() {
         BandService s = BandService.instance;
-        boolean on = s != null;
-        state.setText(on ? s.stateText() : "没在运行");
-        connectBtn.setText(on ? "断开" : "连接");
-        String d = "";
-        if (on && s.session != null) {
-            BandSession bs = s.session;
-            long last = bs.samples().lastTs() * 1000L;
-            d = last > 0 ? "手环数据到 " + new java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.ROOT).format(new java.util.Date(last)) : "还没有数据（连上后一分钟内会拉第一次）";
-            calibTxt.setText(BandService.calib.isEmpty() ? (bs.calibration() != null ? "已校准过 ✓" : "还没校准") : BandService.calib);
-            calibBtn.setEnabled(bs.isReady() && !bs.calibrating());
-            renderHrLive(bs);
-        } else { calibTxt.setText("先连上手环"); calibBtn.setEnabled(false); renderHrLive(null); }
-        data.setText(d);
+        BandSession bs = s == null ? null : s.session;
+        renderConnection(s, bs);
+        renderHrLive(bs);
+        loadHealthLine(bs);
 
-        boolean mcpOn = on && s.mcp != null && s.mcp.isRunning();
-        mcpBtn.setText(BandService.mcpWanted(this) ? "关掉 MCP 服务" : "打开 MCP 服务");
-        StringBuilder m = new StringBuilder();
-        m.append(mcpOn ? "● 在运行\n" : BandService.mcpWanted(this) ? "○ 连上手环后自动开\n" : "○ 关着\n");
+        // features
+        if (bs == null) { calibSub.setText("先连上手环"); Ui.enable(calibBtn, false); }
+        else {
+            calibSub.setText(!BandService.calib.isEmpty() ? BandService.calib
+                    : bs.calibration() != null ? "已经校准过，手环会自己测压力"
+                    : "还没校准。戴紧手环，坐着不动 1 分钟");
+            Ui.enable(calibBtn, bs.isReady() && !bs.calibrating());
+            calibBtn.setText(bs.calibration() != null ? "重新校准" : "校准");
+        }
+        boolean music = Media.hasAccess(this);
+        musicSub.setText(music ? "手环能切歌，也会显示歌名" : "手环能切歌和暂停。开启通知使用权后还能显示歌名");
+        musicBtn.setVisibility(music ? View.GONE : View.VISIBLE);
+
+        // MCP
+        boolean wanted = BandService.mcpWanted(this);
+        boolean mcpOn = s != null && s.mcp != null && s.mcp.isRunning();
+        mcpSwitch.setChecked(wanted);
+        mcpPill.setText(mcpOn ? "正在运行" : wanted ? "连上手环后自动开启" : "已关闭");
+        mcpPill.setTextColor(mcpOn ? ui.t.good : ui.t.sub);
         List<String> ips = ips();
-        if (ips.isEmpty()) m.append("地址：（手机没连 Wi-Fi）\n");
-        for (String ip : ips) m.append("地址：http://").append(ip).append(":").append(BandService.MCP_PORT).append("/mcp\n");
+        StringBuilder addr = new StringBuilder();
+        if (ips.isEmpty()) addr.append("手机没连 Wi-Fi");
+        for (String ip : ips) { if (addr.length() > 0) addr.append('\n'); addr.append("http://").append(ip).append(':').append(BandService.MCP_PORT).append("/mcp"); }
+        mcpAddr.setText(addr);
         String tk = BandService.token(this);
-        m.append("口令：").append(showToken ? tk : tk.substring(0, 4) + "••••••••••••••••••••");
-        mcpInfo.setText(m.toString());
+        mcpToken.setText(showToken ? tk : tk.substring(0, 4) + " •••• •••• •••• ••••");
+        mcpTokenBtn.setText(showToken ? "隐藏" : "显示");
 
-        musicTxt.setText(Media.hasAccess(this) ? "通知使用权已开 ✓ 手环会显示歌名" : "通知使用权没开：手环能切歌，但不显示歌名");
+        if (logOpen) {
+            StringBuilder lg = new StringBuilder();
+            List<String> lines = BandService.logLines();
+            Collections.reverse(lines);
+            for (int i = 0; i < Math.min(40, lines.size()); i++) { if (i > 0) lg.append('\n'); lg.append(lines.get(i)); }
+            logView.setText(lg.length() == 0 ? "还没有日志" : lg);
+        }
+    }
 
-        StringBuilder lg = new StringBuilder();
-        List<String> lines = BandService.logLines();
-        Collections.reverse(lines);
-        for (int i = 0; i < Math.min(40, lines.size()); i++) lg.append(lines.get(i)).append('\n');
-        log.setText(lg.length() == 0 ? "（还没有）" : lg.toString());
+    private void renderConnection(BandService s, BandSession bs) {
+        String meta;
+        if (s == null || bs == null) {
+            ui.setPill(connPill, "未连接", ui.t.faint);
+            connTitle.setText("手环没有连接");
+            meta = "点「连接」后会在附近找你的华为手环";
+        } else {
+            switch (bs.phase()) {
+                case BandSession.PHASE_READY:
+                    ui.setPill(connPill, "已连接", ui.t.good);
+                    connTitle.setText(bs.model().isEmpty() ? "华为手环" : bs.model());
+                    break;
+                case BandSession.PHASE_AUTH:
+                    ui.setPill(connPill, "认证中", ui.t.warn);
+                    connTitle.setText("正在认证");
+                    break;
+                case BandSession.PHASE_SCAN:
+                    ui.setPill(connPill, "搜索中", ui.t.warn);
+                    connTitle.setText("在找手环");
+                    break;
+                default:
+                    ui.setPill(connPill, "没连上", ui.t.bad);
+                    connTitle.setText("没连上手环");
+            }
+            List<String> bits = new ArrayList<>();
+            if (bs.battery() >= 0) bits.add("电量 " + bs.battery() + "%");
+            long last = bs.samples().lastTs() * 1000L;
+            bits.add(last > 0 ? "数据更新到 " + new SimpleDateFormat("M月d日 HH:mm", Locale.ROOT).format(new Date(last)) : "还没有数据，连上后一分钟内会拉第一次");
+            if (bs.phase() == BandSession.PHASE_AUTH) bits.add("第一次连接时，手环上可能要点一下确认");
+            if (bs.phase() == BandSession.PHASE_IDLE && !bs.lastError().isEmpty()) bits.add(bs.lastError());
+            meta = String.join(" · ", bits);
+        }
+        connMeta.setText(meta);
+        boolean on = s != null;
+        connBtn.setText(on ? "断开" : "连接");
+        // when connected, "断开" is the secondary action and "立即同步" the primary one
+        connBtn.setBackground(ui.ripple(on ? ui.t.surface2 : ui.t.accent, 12));
+        connBtn.setTextColor(on ? ui.t.ink : ui.t.onAccent);
+        syncBtn.setBackground(ui.ripple(on ? ui.t.accent : ui.t.surface2, 12));
+        syncBtn.setTextColor(on ? ui.t.onAccent : ui.t.ink);
+        syncBtn.setVisibility(on ? View.VISIBLE : View.GONE);
+        Ui.enable(syncBtn, bs != null && bs.isReady());
+        connHint.setVisibility(on && bs != null && bs.isReady() ? View.GONE : View.VISIBLE);
+    }
+
+    /** One line under 「健康」: newest heart rate, steps, sleep. Loaded off the UI thread. */
+    private void loadHealthLine(BandSession bs) {
+        if (healthLoading) return;
+        healthLoading = true;
+        new Thread(() -> {
+            String line = null;
+            try {
+                HealthData d = HealthData.load(this, bs);
+                List<String> bits = new ArrayList<>();
+                if (d.hasHr) bits.add("心率 " + d.hr);
+                if (d.stepsToday > 0) bits.add(String.format(Locale.ROOT, "%,d 步", d.stepsToday));
+                if (d.hasSleep) bits.add("睡了 " + d.sleepTotalMin / 60 + " 小时 " + d.sleepTotalMin % 60 + " 分");
+                if (!bits.isEmpty()) line = "今天 · " + String.join(" · ", bits);
+                else if (!d.anything) line = "还没同步过数据";
+            } catch (Throwable ignored) { }
+            final String l = line;
+            runOnUiThread(() -> { healthLoading = false; if (l != null) healthSub.setText(l); });
+        }, "band-health-line").start();
     }
 
     private static List<String> ips() {
@@ -324,129 +602,73 @@ public class MainActivity extends Activity {
         return out;
     }
 
-    /* ── 心跳直播 ── */
+    /* ── heartbeat live ── */
 
-    /** 把一次测量的快照画到卡片上：BPM / 最近一拍多久之前 / lag / 拍数 / 起止。 */
     private void renderHrLive(BandSession bs) {
         HrLiveSession.Snapshot sn = bs == null ? null : bs.hrLiveSnapshot();
         boolean ready = bs != null && bs.isReady();
         boolean running = bs != null && bs.hrLiveRunning();
-        hr1Btn.setEnabled(ready && !running);
-        hr3Btn.setEnabled(ready && !running);
-        hrStopBtn.setEnabled(running);
-        if (bs == null) { hrTxt.setText("先连上手环"); return; }
+        Ui.enable(hr1Btn, ready && !running);
+        Ui.enable(hr3Btn, ready && !running);
+        Ui.enable(hrStopBtn, running);
+        long now = System.currentTimeMillis();
+
         if (sn == null) {
-            hrTxt.setText(ready ? "还没测过。点「开始」—— 60 秒后能看到这一分钟里每一拍的心率。" : "先连上手环");
+            hrBpm.setText("—");
+            ui.setPill(hrState, ready ? "还没测过" : "先连上手环", ui.t.faint);
+            for (TextView v : hrStat) v.setText("—");
+            hrFoot.setText(ready ? "点「测 1 分钟」，测完能看到这一分钟里每一拍的心率。" : "");
+            hrFoot.setVisibility(ready ? View.VISIBLE : View.GONE);
             return;
         }
-        long now = System.currentTimeMillis();
-        StringBuilder sb = new StringBuilder();
-        sb.append(sn.running ? "● 正在测 · " + sn.plannedSeconds + " 秒"
-                              : "○ " + endText(sn.endReason) + " · 用时 " + oneDp(sn.elapsedMs(now) / 1000.0) + " 秒")
-          .append('\n');
-        sb.append("心率 ").append(sn.bpm > 0 ? sn.bpm + " bpm" : "—")
-          .append("（整段平均 ").append(sn.bpmAvg > 0 ? sn.bpmAvg + " bpm" : "—").append("）").append('\n');
-        sb.append("有效 ").append(sn.beats).append(" 拍");
-        if (sn.dropped > 0) {
-            sb.append(" · 丢 ").append(sn.dropped).append(" 样本（sqi0 ").append(sn.droppedSqi0)
-              .append(" / 范围 ").append(sn.droppedRange).append("）");
-        }
-        sb.append('\n');
-        int samples = sn.beats + sn.dropped;
-        if (samples > 0) {
-            sb.append("样本合计 ").append(samples);
-            if (sn.packets > 0) {
-                sb.append(" · 收到 ").append(sn.packets).append(" 个包（每包约 ")
-                  .append(String.format(Locale.ROOT, "%.1f", samples / (float) sn.packets)).append(" 个样本）");
-            }
-            sb.append('\n');
-        }
-        if (sn.lastBeatAtMs > 0) {
-            sb.append("最近一拍：").append(sn.lastBeatAgoMs(now)).append(" ms 前").append('\n');
-            sb.append("lag 估计：").append(sn.lagMs < 0 ? "—" : sn.lagMs + " ms").append('\n');
-        } else if (sn.running) {
-            sb.append("还在等第一拍…").append('\n');
+        hrBpm.setText(sn.bpm > 0 ? String.valueOf(sn.bpm) : "—");
+        if (sn.running) {
+            long left = Math.max(0, sn.plannedSeconds - sn.elapsedMs(now) / 1000);
+            ui.setPill(hrState, "正在测 · 还剩 " + left + " 秒", ui.t.accent);
         } else {
-            sb.append("这次没收到拍（手环没戴紧 / 不肯开 0x19）。").append('\n');
+            ui.setPill(hrState, endText(sn.endReason), sn.error != null || "no-data".equals(sn.endReason) ? ui.t.bad : ui.t.good);
         }
-        if (sn.firstPacketAfterMs >= 0) sb.append("首包：开流后 ").append(sn.firstPacketAfterMs).append(" ms").append('\n');
-        if (sn.startedAtMs > 0) {
-            sb.append("开始 ").append(hhmmss(sn.startedAtMs));
-            if (sn.endedAtMs > 0) sb.append(" → ").append(hhmmss(sn.endedAtMs));
-            sb.append('\n');
-        }
-        if (sn.error != null) sb.append("出错：").append(sn.error);
-        hrTxt.setText(sb.toString().trim());
+        int samples = sn.beats + sn.dropped;
+        hrStat[0].setText(String.valueOf(sn.beats));
+        hrStat[1].setText(sn.dropped > 0 ? sn.dropped + "" : "0");
+        hrStat[2].setText(sn.packets > 0 ? String.format(Locale.ROOT, "%.1f", samples / (float) sn.packets) : "—");
+        hrStat[3].setText(sn.lagMs < 0 || sn.lastBeatAtMs <= 0 ? "—" : sn.lagMs + " ms");
+        hrStat[4].setText(sn.lastBeatAtMs > 0 ? agoText(sn.lastBeatAgoMs(now)) : "—");
+        hrStat[5].setText(sn.firstPacketAfterMs >= 0 ? oneDp(sn.firstPacketAfterMs / 1000.0) + " 秒" : "—");
+
+        List<String> foot = new ArrayList<>();
+        if (sn.bpmAvg > 0) foot.add("整段平均 " + sn.bpmAvg + " bpm");
+        if (sn.dropped > 0) foot.add("丢弃里 sqi=0 有 " + sn.droppedSqi0 + " 个，间隔超范围 " + sn.droppedRange + " 个");
+        if (samples > 0) foot.add("样本合计 " + samples + "，共 " + sn.packets + " 个包");
+        if (sn.startedAtMs > 0) foot.add(hhmmss(sn.startedAtMs) + (sn.endedAtMs > 0 ? " 到 " + hhmmss(sn.endedAtMs) : " 开始") + "，用时 " + oneDp(sn.elapsedMs(now) / 1000.0) + " 秒");
+        if (sn.lastBeatAtMs <= 0) foot.add(sn.running ? "还在等第一拍" : "这次没收到心跳。手环戴紧一点再试");
+        if (sn.error != null) foot.add("出错：" + sn.error);
+        hrFoot.setText(String.join("\n", foot));
+        hrFoot.setVisibility(foot.isEmpty() ? View.GONE : View.VISIBLE);
+    }
+
+    private static String agoText(long ms) {
+        if (ms < 1000) return ms + " ms 前";
+        if (ms < 60_000) return ms / 1000 + " 秒前";
+        if (ms < 3600_000) return ms / 60_000 + " 分钟前";
+        return ms / 3600_000 + " 小时前";
     }
 
     private static String endText(String reason) {
-        if (reason == null) return "结束";
+        if (reason == null) return "测完了";
         switch (reason) {
-            case "timeup": return "到点结束";
-            case "stopped": return "手动停的";
+            case "timeup": return "测完了";
+            case "stopped": return "手动停止";
             case "no-data": return "没收到数据";
             case "interrupted": return "连接断了";
-            case "error": return "出错";
+            case "error": return "出错了";
             default: return reason;
         }
     }
 
+    private static String trimFloat(float f) { return f == (int) f ? String.valueOf((int) f) : String.valueOf(f); }
     private static String oneDp(double v) { return String.format(Locale.ROOT, "%.1f", v); }
-
-    private static String hhmmss(long ms) {
-        // 这个跟界面上的语言无关，固定用 24 小时制
-        return new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date(ms));
-    }
-
-    /* ── tiny view helpers ── */
-
-    private TextView text(String s, float sp, int color, boolean bold) {
-        TextView t = new TextView(this);
-        t.setText(s); t.setTextSize(sp); t.setTextColor(color);
-        t.setLineSpacing(0, 1.2f);
-        if (bold) t.setTypeface(Typeface.DEFAULT_BOLD);
-        return t;
-    }
-
-    private TextView note(String s) { TextView t = text(s, 12, sub, false); t.setPadding(0, dp(8), 0, 0); return t; }
-
-    private LinearLayout card(LinearLayout parent, String title) {
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setPadding(dp(16), dp(14), dp(16), dp(16));
-        GradientDrawable g = new GradientDrawable();
-        g.setColor(card); g.setCornerRadius(dp(18)); g.setStroke(dp(1), Color.argb(28, 120, 80, 95));
-        c.setBackground(g);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.topMargin = dp(12);
-        parent.addView(c, lp);
-        TextView t = text(title, 14, sub, true);
-        t.setPadding(0, 0, 0, dp(8));
-        c.addView(t);
-        return c;
-    }
-
-    private Button button(LinearLayout parent, String label, View.OnClickListener l) {
-        Button b = new Button(this);
-        b.setText(label); b.setAllCaps(false); b.setTextColor(ink); b.setTextSize(14);
-        GradientDrawable g = new GradientDrawable();
-        g.setColor(Color.argb(46, Color.red(accent), Color.green(accent), Color.blue(accent)));
-        g.setCornerRadius(dp(22));
-        b.setBackground(g);
-        b.setOnClickListener(l);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(44));
-        lp.topMargin = dp(8);
-        parent.addView(b, lp);
-        return b;
-    }
-
-    private EditText input(LinearLayout parent, String hint, String val, int type) {
-        EditText e = new EditText(this);
-        e.setHint(hint); e.setText(val); e.setInputType(type); e.setTextColor(ink); e.setHintTextColor(sub); e.setTextSize(14);
-        e.setGravity(Gravity.CENTER_VERTICAL);
-        parent.addView(e, new LinearLayout.LayoutParams(-1, -2));
-        return e;
-    }
+    private static String hhmmss(long ms) { return new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date(ms)); }
 
     private void toast(String s) { Toast.makeText(this, s, Toast.LENGTH_SHORT).show(); }
 }

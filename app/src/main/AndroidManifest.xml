@@ -15,8 +15,9 @@
 
     <application
         android:label="手环桥"
-        android:icon="@android:drawable/stat_sys_data_bluetooth"
-        android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:theme="@style/Bridge"
         android:allowBackup="false"
         android:usesCleartextTraffic="false">
 
@@ -27,10 +28,9 @@
             </intent-filter>
         </activity>
 
-        <!-- 健康页：横幅 / 六块概览 / 图表，纯系统 View + Canvas -->
+        <!-- 健康页：横幅 / 六块概览 / 图表，纯系统 View + Canvas，跟随系统深浅色 -->
         <activity android:name=".HealthActivity" android:exported="false"
-            android:label="健康"
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+            android:label="健康" />
 
         <service android:name=".BandService" android:exported="false"
             android:foregroundServiceType="connectedDevice" />

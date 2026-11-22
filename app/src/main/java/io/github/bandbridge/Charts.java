@@ -175,7 +175,7 @@ final class Charts {
         @Override protected void onDraw(Canvas c) {
             float cx = getWidth() / 2f, cy = getHeight() / 2f, rad = Math.min(cx, cy);
             if (none) {
-                base.setShader(new RadialGradient(cx, cy, rad, alpha(0xFFFFFFFF, 0.10f), alpha(0xFFFFFFFF, 0.04f), Shader.TileMode.CLAMP));
+                base.setShader(new RadialGradient(cx, cy, rad, alpha(0xFF9A8E93, 0.30f), alpha(0xFF9A8E93, 0.10f), Shader.TileMode.CLAMP));
             } else {
                 base.setShader(new RadialGradient(cx, cy, rad, color, alpha(color, 0f), Shader.TileMode.CLAMP));
                 hi.setColor(alpha(0xFFFFFFFF, 0.55f));

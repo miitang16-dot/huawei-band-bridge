@@ -46,7 +46,8 @@ import java.util.Locale;
 public class HealthActivity extends Activity {
 
     private final Handler h = new Handler(Looper.getMainLooper());
-    private int ink, sub, card, bg, stroke, accent;
+    private int ink, sub, card, bg, stroke, accent, track;
+    private Ui ui;
     private float density;
 
     private final BandService.Ui myUi = () -> h.post(this::refresh);
@@ -82,24 +83,15 @@ public class HealthActivity extends Activity {
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
         density = getResources().getDisplayMetrics().density;
-        Charts.Palette p = new Charts.Palette(true);
-        ink = p.ink; sub = p.sub; card = p.card; bg = p.bg; stroke = p.stroke; accent = p.accent;
-        getWindow().setStatusBarColor(bg);
-        if (Build.VERSION.SDK_INT >= 23) {
-            int flags = getWindow().getDecorView().getSystemUiVisibility();
-            getWindow().getDecorView().setSystemUiVisibility(flags & ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-        }
+        ui = new Ui(this);
+        ink = ui.t.ink; sub = ui.t.sub; card = ui.t.surface; bg = ui.t.bg; stroke = ui.t.line; accent = ui.t.accent;
+        track = ui.t.track;
 
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setPadding(dp(16), dp(16), dp(16), dp(32));
-        ScrollView sv = new ScrollView(this);
-        sv.setBackgroundColor(bg);
-        sv.setFillViewport(true);
-        sv.addView(col);
-        setContentView(sv);
+        // edge to edge: the top bar sits below the status bar, the list ends above the nav bar
+        Ui.Screen screen = ui.screen();
+        ui.barTitle(screen, "健康", true);
+        LinearLayout col = screen.body;
 
-        buildHeader(col);
         buildHero(col);
         buildTiles(col);
         buildHrSection(col);
@@ -155,18 +147,6 @@ public class HealthActivity extends Activity {
 
     /* ── build ─────────────────────────────────────────────────────────────── */
 
-    private void buildHeader(LinearLayout col) {
-        LinearLayout head = row();
-        TextView back = pillText("‹ 返回");
-        back.setOnClickListener(v -> finish());
-        head.addView(back);
-        TextView title = tv("健康", 20, ink, true);
-        title.setPadding(dp(12), 0, 0, 0);
-        head.addView(title);
-        head.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
-        col.addView(head);
-    }
-
     private void buildHero(LinearLayout col) {
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
@@ -175,7 +155,7 @@ public class HealthActivity extends Activity {
         heroBg.setHeroTints(Charts.Palette.HR, Charts.Palette.SLEEP);
         hero.setBackground(heroBg);
         LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(-1, -2);
-        hlp.topMargin = dp(14);
+        hlp.topMargin = dp(8);
         col.addView(hero, hlp);
 
         LinearLayout top = row();
@@ -193,7 +173,7 @@ public class HealthActivity extends Activity {
         LinearLayout pill = row();
         pill.setPadding(dp(10), dp(5), dp(10), dp(5));
         GradientDrawable chipBg = new GradientDrawable();
-        chipBg.setColor(Color.argb(46, 255, 255, 255));
+        chipBg.setColor(ui.t.surface2);
         chipBg.setCornerRadius(dp(999));
         chipBg.setStroke(dp(1), stroke);
         pill.setBackground(chipBg);
@@ -293,7 +273,7 @@ public class HealthActivity extends Activity {
                 stepVal = bigValue();
                 t.addView(stepVal);
                 stepBar = new Charts.MiniBarView(this);
-                stepBar.setColors(Charts.Palette.STEP, Color.argb(20, 255, 255, 255));
+                stepBar.setColors(Charts.Palette.STEP, track);
                 LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-1, dp(6));
                 blp.topMargin = dp(6);
                 t.addView(stepBar, blp);
@@ -407,7 +387,7 @@ public class HealthActivity extends Activity {
         c.addView(stressAxis);
         stressDist = new LinearLayout(this);
         stressDist.setOrientation(LinearLayout.HORIZONTAL);
-        stressDist.setBackground(rounded(Color.argb(16, 255, 255, 255), 999));
+        stressDist.setBackground(rounded(track, 999));
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-1, dp(8));
         dlp.topMargin = dp(8);
         c.addView(stressDist, dlp);
@@ -472,7 +452,7 @@ public class HealthActivity extends Activity {
             pillDot.setColor(0xFF6FC497, true);
             pillTxt.setText(d.model.isEmpty() ? "手环已连接" : d.model + " 已连接");
         }
-        heroBatt.setText(d.battery >= 0 ? "🔋 " + d.battery + "%" : "");
+        heroBatt.setText(d.battery >= 0 ? "电量 " + d.battery + "%" : "");
         heroBatt.setVisibility(d.battery >= 0 ? View.VISIBLE : View.GONE);
         heroData.setText(d.lastDataMs > 0 ? "数据到 " + hhmm(d.lastDataMs) : "还没有数据");
         boolean canSync = d.serviceRunning && d.connected;
@@ -514,12 +494,12 @@ public class HealthActivity extends Activity {
             String[] hm = hmParts(d.sleepTotalMin);
             setValue(sleepVal, hm[0], "时", hm[1], "分");
             sleepStages.setData(d.sleepFallMs, d.sleepWakeMs, d.sleepRunStart, d.sleepRunMin, d.sleepRunCode,
-                    Charts.Palette.SLEEP, Color.argb(18, 255, 255, 255), true);
+                    Charts.Palette.SLEEP, track, true);
             sleepSub.setText(hhmm(d.sleepFallMs) + "→" + hhmm(d.sleepWakeMs) + (d.sleepScore > 0 ? " · " + d.sleepScore + " 分" : ""));
         } else {
             sleepVal.setText("—");
             sleepStages.setData(0, 0, new long[0], new int[0], new int[0],
-                    Charts.Palette.SLEEP, Color.argb(18, 255, 255, 255), true);
+                    Charts.Palette.SLEEP, track, true);
             sleepSub.setText("昨晚没有记录");
         }
 
@@ -578,7 +558,7 @@ public class HealthActivity extends Activity {
         sleepStats.setText(stats("总时长", hmShort(d.sleepTotalMin), "入睡", hhmm(d.sleepFallMs),
                 "醒来", hhmm(d.sleepWakeMs), "睡眠分", d.sleepScore > 0 ? String.valueOf(d.sleepScore) : "—"));
         sleepBar.setData(d.sleepFallMs, d.sleepWakeMs, d.sleepRunStart, d.sleepRunMin, d.sleepRunCode,
-                Charts.Palette.SLEEP, Color.argb(18, 255, 255, 255), true);
+                Charts.Palette.SLEEP, track, true);
         SpannableStringBuilder lg = new SpannableStringBuilder();
         lg.append(legendLine(Charts.Palette.SLEEP, "深睡", hmShort(d.sleepDeepMin)));
         lg.append("    ").append(legendLine(alpha(Charts.Palette.SLEEP, 0.55f), "浅睡", hmShort(d.sleepLightMin)));
@@ -631,7 +611,7 @@ public class HealthActivity extends Activity {
             emoStats.setText(stats("记录", String.valueOf(d.emoStart.length),
                     "愉悦", String.valueOf(d.emoCnt[3]), "平静", String.valueOf(d.emoCnt[2]),
                     "不愉悦", String.valueOf(d.emoCnt[1])));
-            emoStrip.setData(d.dayStartMs, d.emoStart, d.emoEnd, d.emoCodeArr, Color.argb(16, 255, 255, 255));
+            emoStrip.setData(d.dayStartMs, d.emoStart, d.emoEnd, d.emoCodeArr, track);
         }
     }
 
@@ -692,7 +672,7 @@ public class HealthActivity extends Activity {
         TextView t = tv(s, 12, ink, true);
         t.setPadding(dp(11), dp(5), dp(11), dp(5));
         GradientDrawable g = new GradientDrawable();
-        g.setColor(Color.argb(40, 255, 255, 255));
+        g.setColor(ui.t.surface2);
         g.setCornerRadius(dp(999));
         g.setStroke(dp(1), stroke);
         t.setBackground(g);
