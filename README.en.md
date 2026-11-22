@@ -54,11 +54,13 @@ The long write-up is in [`docs/reverse-engineering.md`](docs/reverse-engineering
 | Health page in the app | Banner, six tiles, four chart sections | `[IMPLEMENTED]` (not yet seen on a device) |
 | Data export | JSON plus one CSV per store | `[IMPLEMENTED]` (file writing not yet checked on a device) |
 
-**About heartbeat live.** Two device runs gave **87 valid beats + 109 discarded samples (196 samples)** in
-1 minute and **279 + 337 (616)** in 3 minutes, both with a lag estimate of 0 ms. That is consistent with
-the band pushing beats in real time, but it **cannot by itself rule out** the band holding back up to one
-packet's worth of beats. "Discarded" means samples the band itself flagged as invalid (`sqi=0`) or with an
-implausible interval; these are **not missed heartbeats**. See [`docs/lab/hrlive-0x19.md`](docs/lab/hrlive-0x19.md).
+**About heartbeat live.** The first two device runs (0.1.1) gave **87 valid beats + 109 discarded samples (196)** in
+1 minute and **279 + 337 (616)** in 3 minutes, both with a lag estimate of 0 ms. A third 3-minute run (0.1.8) gave
+**264 + 352 (616)** in **44 packets, about 14 samples each (one packet every ~4 s)**, ending with a lag of **5900 ms**.
+So the band **pushes in batches** and the delay is **a few seconds**: you get one value per beat, a few seconds late,
+not each beat as it happens. The earlier 0 ms runs did not record packet counts and should not be read as proof of
+real-time delivery. "Discarded" means samples the band itself flagged as invalid (all 352 in the third run were `sqi=0`);
+these are **not missed heartbeats**. See [`docs/lab/hrlive-0x19.md`](docs/lab/hrlive-0x19.md).
 
 ## Install
 
