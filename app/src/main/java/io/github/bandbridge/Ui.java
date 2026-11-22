@@ -253,7 +253,8 @@ final class Ui {
         txt.addView(st);
         r.addView(txt, new LinearLayout.LayoutParams(0, -2, 1f));
         if (trailing != null) {
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+            ViewGroup.LayoutParams own = trailing.getLayoutParams();
+            LinearLayout.LayoutParams lp = own instanceof LinearLayout.LayoutParams ? (LinearLayout.LayoutParams) own : new LinearLayout.LayoutParams(-2, -2);
             lp.leftMargin = dp(12);
             r.addView(trailing, lp);
         }

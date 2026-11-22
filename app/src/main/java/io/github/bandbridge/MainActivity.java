@@ -156,8 +156,7 @@ public class MainActivity extends Activity {
         LinearLayout g = ui.group(col);
         ((LinearLayout.LayoutParams) g.getLayoutParams()).topMargin = ui.dp(12);
         Ui.Chevron chev = new Ui.Chevron(this, ui.t.faint, false);
-        chev.setMinimumWidth(ui.dp(16));
-        chev.setMinimumHeight(ui.dp(16));
+        chev.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(16), ui.dp(16)));
         healthSub = ui.row(g, "健康", "心率、血氧、步数、睡眠、压力和情绪", chev,
                 v -> startActivity(new Intent(this, HealthActivity.class)));
     }
@@ -647,14 +646,15 @@ public class MainActivity extends Activity {
         long now = System.currentTimeMillis();
 
         if (sn == null) {
-            hrBpm.setText("—");
+            setBpm(0);
             ui.setPill(hrState, ready ? "还没测过" : "先连上手环", ui.t.faint);
             for (TextView v : hrStat) v.setText("—");
+            dimEmptyStats();
             hrFoot.setText(ready ? "点「测 1 分钟」，测完能看到这一分钟里每一拍的心率。" : "");
             hrFoot.setVisibility(ready ? View.VISIBLE : View.GONE);
             return;
         }
-        hrBpm.setText(sn.bpm > 0 ? String.valueOf(sn.bpm) : "—");
+        setBpm(sn.bpm);
         if (sn.running) {
             long left = Math.max(0, sn.plannedSeconds - sn.elapsedMs(now) / 1000);
             ui.setPill(hrState, "正在测 · 还剩 " + left + " 秒", ui.t.accent);
@@ -668,6 +668,7 @@ public class MainActivity extends Activity {
         hrStat[3].setText(sn.lagMs < 0 || sn.lastBeatAtMs <= 0 ? "—" : sn.lagMs + " ms");
         hrStat[4].setText(sn.lastBeatAtMs > 0 ? agoText(sn.lastBeatAgoMs(now)) : "—");
         hrStat[5].setText(sn.firstPacketAfterMs >= 0 ? oneDp(sn.firstPacketAfterMs / 1000.0) + " 秒" : "—");
+        dimEmptyStats();
 
         List<String> foot = new ArrayList<>();
         if (sn.bpmAvg > 0) foot.add("整段平均 " + sn.bpmAvg + " bpm");
@@ -678,6 +679,25 @@ public class MainActivity extends Activity {
         if (sn.error != null) foot.add("出错：" + sn.error);
         hrFoot.setText(String.join("\n", foot));
         hrFoot.setVisibility(foot.isEmpty() ? View.GONE : View.VISIBLE);
+    }
+
+    /** Big number when there is a reading; a quiet「未测量」instead of a lone dash when there is not. */
+    private void setBpm(int bpm) {
+        if (bpm > 0) {
+            hrBpm.setText(String.valueOf(bpm));
+            hrBpm.setTextSize(44);
+            hrBpm.setTextColor(ui.t.ink);
+            hrUnit.setVisibility(View.VISIBLE);
+        } else {
+            hrBpm.setText("未测量");
+            hrBpm.setTextSize(24);
+            hrBpm.setTextColor(ui.t.faint);
+            hrUnit.setVisibility(View.GONE);
+        }
+    }
+
+    private void dimEmptyStats() {
+        for (TextView v : hrStat) v.setTextColor("—".contentEquals(v.getText()) ? ui.t.faint : ui.t.ink);
     }
 
     private static String agoText(long ms) {
