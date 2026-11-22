@@ -40,6 +40,8 @@ public final class RriBeats {
 
     private int accepted;
     private int dropped;
+    private int droppedSqi0;
+    private int droppedRange;
     private long sumRriMs;
     private long firstBeatAtMs = -1L;
     private long lastBeatAtMs = -1L;
@@ -60,10 +62,8 @@ public final class RriBeats {
      * @return true = 这一拍被收下；false = 因为太短/太长/sqi=0 被丢掉（计入 {@link #dropped()}）
      */
     public boolean add(int rriMs, int sqi, long packetAtMs) {
-        if (sqi == 0 || rriMs < MIN_RRI_MS || rriMs > MAX_RRI_MS) {
-            dropped++;
-            return false;
-        }
+        if (sqi == 0) { droppedSqi0++; dropped++; return false; }
+        if (rriMs < MIN_RRI_MS || rriMs > MAX_RRI_MS) { droppedRange++; dropped++; return false; }
         long at = lastBeatAtMs < 0 ? packetAtMs : lastBeatAtMs + rriMs;
         if (firstBeatAtMs < 0) firstBeatAtMs = at;
         lastBeatAtMs = at;
@@ -84,8 +84,14 @@ public final class RriBeats {
     /** 收下的总拍数（整次测量，不随窗口收缩）。 */
     public int beats() { return accepted; }
 
-    /** 被丢掉的拍数（sqi=0 或间期离谱）。 */
+    /** 被丢掉的拍数（sqi=0 或间期离谱）；= {@link #droppedSqi0()} + {@link #droppedRange()}。 */
     public int dropped() { return dropped; }
+
+    /** 丢掉里因为 sqi=0（手环自己说这一拍不可信）的条数。 */
+    public int droppedSqi0() { return droppedSqi0; }
+
+    /** 丢掉里因为间期 <250 ms 或 >3000 ms（漏拍 / 断拍 / 手指没贴住）的条数。 */
+    public int droppedRange() { return droppedRange; }
 
     /** 窗口里还剩几拍（用来算 {@link #bpm()}）。 */
     public int beatsInWindow() { return window.size(); }
@@ -142,6 +148,8 @@ public final class RriBeats {
         window.clear();
         accepted = 0;
         dropped = 0;
+        droppedSqi0 = 0;
+        droppedRange = 0;
         sumRriMs = 0;
         firstBeatAtMs = -1L;
         lastBeatAtMs = -1L;

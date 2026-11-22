@@ -83,8 +83,12 @@ public final class HrLiveSession {
         public final int instantBpm;
         /** 收下的总拍数。 */
         public final int beats;
-        /** 被丢掉拍的数（sqi=0 / 间期离谱）。 */
+        /** 被丢掉拍的数（sqi=0 / 间期离谱）。= {@link #droppedSqi0} + {@link #droppedRange}。 */
         public final int dropped;
+        /** 丢掉里 sqi=0 的条数（手环自己说这一拍不可信）。 */
+        public final int droppedSqi0;
+        /** 丢掉里间期 <250 ms 或 >3000 ms 的条数（漏拍 / 断拍 / 手没贴住）。 */
+        public final int droppedRange;
         /** 收到几个 0x19/0x05 包。 */
         public final int packets;
         /** 最后一拍的时刻（epoch 毫秒），0 = 还没收到拍。 */
@@ -102,8 +106,8 @@ public final class HrLiveSession {
         public final String error;
 
         Snapshot(boolean running, int plannedSeconds, long startedAtMs, long endedAtMs,
-                 int bpm, int bpmAvg, int instantBpm, int beats, int dropped, int packets,
-                 long lastBeatAtMs, long lagMs, long firstPacketAfterMs, int windowSpanMs,
+                 int bpm, int bpmAvg, int instantBpm, int beats, int dropped, int droppedSqi0, int droppedRange,
+                 int packets, long lastBeatAtMs, long lagMs, long firstPacketAfterMs, int windowSpanMs,
                  String endReason, String error) {
             this.running = running;
             this.plannedSeconds = plannedSeconds;
@@ -114,6 +118,8 @@ public final class HrLiveSession {
             this.instantBpm = instantBpm;
             this.beats = beats;
             this.dropped = dropped;
+            this.droppedSqi0 = droppedSqi0;
+            this.droppedRange = droppedRange;
             this.packets = packets;
             this.lastBeatAtMs = lastBeatAtMs;
             this.lagMs = lagMs;
@@ -125,7 +131,7 @@ public final class HrLiveSession {
 
         /** 请求刚发出、测量还没真正开始时的占位快照（别让宿主以为「没在测」）。 */
         public static Snapshot starting(long atMs, int seconds) {
-            return new Snapshot(true, seconds, atMs, 0L, 0, 0, 0, 0, 0, 0, 0L, -1L, -1L, 0, null, null);
+            return new Snapshot(true, seconds, atMs, 0L, 0, 0, 0, 0, 0, 0, 0, 0, 0L, -1L, -1L, 0, null, null);
         }
 
         /** 这次测了多久（毫秒）：运行中 = 到现在，结束后 = 实际时长。 */
@@ -309,8 +315,9 @@ public final class HrLiveSession {
             last = result;
             running = false;
             probe(String.format(Locale.ROOT,
-                    "end | reason=%s took=%dms packets=%d beats=%d dropped=%d bpm=%d avg=%d lag=%dms first-pkt=%dms",
+                    "end | reason=%s took=%dms packets=%d beats=%d dropped=%d (sqi0=%d range=%d) bpm=%d avg=%d lag=%dms first-pkt=%dms",
                     reason, endedAtMs - startedAtMs, packets, beats.beats(), beats.dropped(),
+                    beats.droppedSqi0(), beats.droppedRange(),
                     beats.bpm(), beats.avgBpm(), lastLagMs, firstPacketAfterMs));
             if (callback != null) { try { callback.onEnd(result); } catch (Throwable ignored) { } }
         }
@@ -372,8 +379,9 @@ public final class HrLiveSession {
         }
         if (at - lastProbeAtMs >= PROBE_EVERY_MS) {
             lastProbeAtMs = at;
-            probe(String.format(Locale.ROOT, "pkt | #%d +%d total=%d dropped=%d bpm=%d avg=%d lag=%dms",
-                    packets, added, beats.beats(), beats.dropped(), beats.bpm(), beats.avgBpm(), lastLagMs));
+            probe(String.format(Locale.ROOT, "pkt | #%d +%d total=%d dropped=%d (sqi0=%d range=%d) bpm=%d avg=%d lag=%dms",
+                    packets, added, beats.beats(), beats.dropped(), beats.droppedSqi0(), beats.droppedRange(),
+                    beats.bpm(), beats.avgBpm(), lastLagMs));
         }
         Snapshot s = snapshot(true, null, null);
         last = s;
@@ -386,6 +394,7 @@ public final class HrLiveSession {
     private Snapshot snapshot(boolean isRunning, String reason, String error) {
         return new Snapshot(isRunning, plannedSeconds, startedAtMs, isRunning ? 0L : endedAtMs,
                 beats.bpm(), beats.avgBpm(), beats.instantBpm(), beats.beats(), beats.dropped(),
+                beats.droppedSqi0(), beats.droppedRange(),
                 packets, beats.lastBeatAtMs(), lastLagMs, firstPacketAfterMs, beats.windowSpanMs(),
                 reason, error);
     }

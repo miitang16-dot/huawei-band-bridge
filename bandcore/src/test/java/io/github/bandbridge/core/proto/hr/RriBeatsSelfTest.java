@@ -19,6 +19,7 @@ public final class RriBeatsSelfTest {
         groupWindow();
         groupEmpty();
         groupFirstBeatAnchor();
+        groupDropBreakdown();
         groupReset();
     }
 
@@ -122,6 +123,43 @@ public final class RriBeatsSelfTest {
         b.add(700, 3, 9_999L);          // 第二拍的时间不看到达时刻，看累加
         T.eq("第二拍 = 5000+700", 5_700L, b.lastBeatAtMs());
         T.eq("lag 在 6000 时 = 300", 300L, b.lagMs(6_000L));
+    }
+
+    private static void groupDropBreakdown() {
+        T.group("丢弃分两类（sqi=0 / 间期离谱），总数 = 两类之和");
+        RriBeats b = new RriBeats();
+        b.add(800, 0, 1_000L);      // sqi=0 → sqi0
+        b.add(900, 0, 2_000L);      // sqi=0 → sqi0
+        b.add(200, 2, 3_000L);      // 太短 → range
+        b.add(3_500, 2, 4_000L);    // 太长 → range
+        T.eq("sqi0 两条", 2, b.droppedSqi0());
+        T.eq("range 两条", 2, b.droppedRange());
+        T.eq("dropped = 4", 4, b.dropped());
+        T.eq("dropped = sqi0 + range", b.droppedSqi0() + b.droppedRange(), b.dropped());
+        T.yes("好拍还是收", b.add(800, 3, 5_000L));
+        T.eq("收下 1 拍", 1, b.beats());
+
+        /* sqi=0 优先归类：间期也离谱时只记 sqi0 一次，别双重计数 */
+        RriBeats p = new RriBeats();
+        p.add(100, 0, 1_000L);
+        T.eq("sqi=0 且间期离谱 → 只算 sqi0", 1, p.droppedSqi0());
+        T.eq("range 不重复计", 0, p.droppedRange());
+        T.eq("dropped 也只 +1", 1, p.dropped());
+
+        p.reset();
+        T.eq("reset 清 sqi0", 0, p.droppedSqi0());
+        T.eq("reset 清 range", 0, p.droppedRange());
+
+        /* 真机那次的量级：279 收 / 337 丢（丢掉里几乎全是 sqi=0），这里验算分类不丢数 */
+        RriBeats real = new RriBeats();
+        for (int i = 0; i < 300; i++) real.add(800, 0, i * 800L);
+        for (int i = 0; i < 37; i++) real.add(3_600, 2, i * 800L);
+        T.eq("337 丢全在 sqi0", 300, real.droppedSqi0());
+        T.eq("337 丢全在 range", 37, real.droppedRange());
+        T.eq("合计 337", 337, real.dropped());
+        for (int i = 0; i < 279; i++) real.add(800, 2, i * 800L);
+        T.eq("收 279", 279, real.beats());
+        T.eq("收下 + 丢掉 = 616 条样本，一条没漏", 616, real.beats() + real.dropped());
     }
 
     private static void groupReset() {
