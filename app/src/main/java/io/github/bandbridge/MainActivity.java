@@ -165,19 +165,24 @@ public class MainActivity extends Activity {
         ui.section(col, "心跳直播");
         LinearLayout c = ui.card(col);
 
+        // status pill on its own line, then the number with its unit on a shared baseline
         LinearLayout top = new LinearLayout(this);
-        top.setGravity(Gravity.BOTTOM);
-        hrBpm = ui.text("—", 44, ui.t.ink, Ui.BOLD);
-        top.addView(hrBpm);
-        hrUnit = ui.text(" bpm", 14, ui.t.sub, null);
-        hrUnit.setPadding(0, 0, 0, ui.dp(7));
-        top.addView(hrUnit);
-        top.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+        top.setGravity(Gravity.CENTER_VERTICAL);
         hrState = ui.pill("", ui.t.faint);
-        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(-2, -2);
-        plp.bottomMargin = ui.dp(8);
-        top.addView(hrState, plp);
+        top.addView(hrState);
         c.addView(top);
+
+        LinearLayout num = new LinearLayout(this);
+        num.setBaselineAligned(true);
+        hrBpm = ui.text("—", 44, ui.t.ink, Ui.BOLD);
+        hrBpm.setIncludeFontPadding(true);
+        num.addView(hrBpm);
+        hrUnit = ui.text(" bpm", 15, ui.t.sub, null);
+        hrUnit.setIncludeFontPadding(true);
+        num.addView(hrUnit);
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(-1, -2);
+        nlp.topMargin = ui.dp(10);
+        c.addView(num, nlp);
 
         TextView lead = ui.meta("手环一拍一拍推送心跳间隔，换算成心率。比每分钟一格细得多，测的时候戴紧、坐着别说话。");
         lead.setPadding(0, ui.dp(6), 0, 0);
@@ -599,6 +604,10 @@ public class MainActivity extends Activity {
         syncBtn.setBackground(ui.ripple(on ? ui.t.accent : ui.t.surface2, 12));
         syncBtn.setTextColor(on ? ui.t.onAccent : ui.t.ink);
         syncBtn.setVisibility(on ? View.VISIBLE : View.GONE);
+        // with 立即同步 hidden, 连接 spans the card: drop the gap it kept on its left
+        LinearLayout.LayoutParams clp = (LinearLayout.LayoutParams) connBtn.getLayoutParams();
+        int gap = on ? ui.dp(8) : 0;
+        if (clp.leftMargin != gap) { clp.leftMargin = gap; connBtn.setLayoutParams(clp); }
         Ui.enable(syncBtn, bs != null && bs.isReady());
         connHint.setVisibility(on && bs != null && bs.isReady() ? View.GONE : View.VISIBLE);
     }
