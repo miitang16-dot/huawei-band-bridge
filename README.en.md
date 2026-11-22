@@ -87,6 +87,10 @@ Both approaches have trade-offs; pick whichever you need.
 The AI and the phone must be on the same LAN (or joined through something like Tailscale). Clients
 that cannot set headers can use `…/mcp?token=<token>` instead.
 
+5. Want your own copy of the data? Tap "导出数据" (Export data): it writes one JSON with all local
+   stores packed as-is plus one CSV per store (flattened by date + fields, opens straight in Excel)
+   to `Download/HuaweiBandBridge/` on the phone. Local only — nothing is uploaded.
+
 ### MCP tools
 
 | Tool | What it does |
@@ -111,6 +115,7 @@ app/                        one-screen UI + foreground service + the MCP server 
   McpServer                   on-phone MCP (Streamable HTTP, POST /mcp, Bearer token)
   BandTools                   the 6 tools: read local stores, answers carry record time and granularity
   WeatherFetch                weather from Open-Meteo (coarse location only)
+  DataExport                  export local stores → Download/HuaweiBandBridge (JSON + CSV)
   Media · MediaListener       read the current playback (notification access) for the band music page
 
 bandcore/                   the Huawei-band protocol core (no UI, no network, no Huawei dependency)
@@ -154,6 +159,31 @@ the phone) → AI client. There is no server in between.
   the internet**; use it on your LAN (or through Tailscale-like networking).
 - Uninstalling the app wipes everything: identities, token and data all live in the app's private
   storage and SharedPreferences.
+- Files written by "Export data" also stay on the phone (Download directory or the app's external
+  directory); the app never uploads them.
+
+## Tests / development
+
+The protocol layer (TLV, framing, CRC16, slicing, time conversion) has an **offline self-test** that
+needs no band, no Android SDK and no network:
+
+```bash
+./selftest.sh      # Linux / macOS / Git Bash
+```
+
+```powershell
+.\selftest.ps1     # Windows
+```
+
+It only uses JDK 17+ (the project uses JDK 21) with `javac` + `java` and currently runs **168 checks**
+(TLV encode/decode + edge cases, CRC16 against an independent implementation, frame header/length/
+partial packets/slice reassembly, `PacketAssembler` feeding, `HuaweiUtil` time conversion). What is
+covered and what is *not* (BLE link, auth, crypto KATs) is in **[docs/TESTING.md](docs/TESTING.md)** —
+read it before touching protocol code.
+
+`.github/workflows/build.yml` runs the self-test and `:app:assembleDebug` on push / PR and uploads the
+APK as an artifact; **this workflow has not been run on GitHub yet** (Actions cannot be verified from
+this machine), so the first real run may need small fixes.
 
 ## Use it as a library
 

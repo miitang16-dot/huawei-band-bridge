@@ -69,6 +69,14 @@ Gadgetbridge 的源码是这条路的起点（AGPL-3.0，见 `NOTICE.md`），�
 
 - [x] 两个 Gradle 模块（`bandcore` 库 + `app`），AGP 8.13.0 / Gradle 8.14.3 / JDK 21，编译通过，
       干净重建产物可复现（见 `RELEASE-0.1.md`）
+- [x] **纯协议层离线自测**：`selftest.ps1` / `selftest.sh`，零依赖（只用 JDK 的 `javac` + `java`，
+      不需要手环 / Android SDK / 网络），168 项检查覆盖 TLV 编解码与边界、CRC16（对照独立实现）、
+      帧头 / 长度 / 半包 / 分片重组、`PacketAssembler` 喂包、时间换算。见 `docs/TESTING.md`
+      （也写清了蓝牙链路、认证、加密 KAT 这些都还测不到）
+- [x] GitHub Actions：`.github/workflows/build.yml`，push / PR 时跑自测 + `:app:assembleDebug`，
+      APK 作为 artifact 上传 —— **未在 GitHub 上实跑验证**（本机无法验证 Actions，第一次跑可能还要小修）
+- [x] **数据导出**：App 里「导出数据」→ `Download/HuaweiBandBridge/` 下一个原样打包的 JSON +
+      每个存档一个 CSV（按日期摊平；Android 10+ 用 MediaStore，8/9 写 App 外部目录，都不需要存储权限）
 - [x] `LICENSE`（AGPL-3.0）、`NOTICE.md`（Gadgetbridge 来源与改动）、`README.md`、
       `RELEASE-0.1.md`、本文件
 
@@ -94,13 +102,13 @@ Gadgetbridge 的源码是这条路的起点（AGPL-3.0，见 `NOTICE.md`），�
 - [ ] 更多型号（Band 9 / 11、Watch 系列）：命令表是连上后探测的，理论上能适配，
       差异要逐型号摸。`HiChainPakeUtils`（PAKE / STS，Honor Watch 5 用）已经搬进来，
       但 `AuthFlow` 还没接上调度
-- [ ] MCP：SSE 流（现在只回 JSON）、HTTPS、更多工具（周趋势 / 同步触发 / 数据导出）
-- [ ] 数据导出（给用户一份能读的 JSON / CSV）
+- [ ] MCP：SSE 流（现在只回 JSON）、HTTPS、更多工具（周趋势 / 同步触发 / 数据导出工具）
+- 数据导出：已做（App 里的「导出数据」，见上面「已完成」）；MCP 侧暂时没有 export 工具
 
 ### P2 · 工程
 
-- [ ] 纯协议层单元测试（TLV、帧编解码、CRC、时间换算）—— 这些不需要硬件，能进 CI
-- [ ] CI：GitHub Actions 编 APK 当 artifact（协议部分没法在里面测）
+- [x] 纯协议层单元测试（TLV、帧编解码、CRC、时间换算）—— 零依赖 self-test，不需要硬件，已进 CI
+- [x] CI：GitHub Actions 编 APK 当 artifact + 跑自测（workflow 未在 GitHub 上实跑验证）
 - [ ] 发布签名 + 版本号流程（现在只有 debug 签名）
 - [ ] UI 中英文字符串抽到资源、加图标、支持横屏 / 深色主题检查
 - [ ] 各厂商电池优化白名单的引导文案（国产 ROM 后台杀进程）

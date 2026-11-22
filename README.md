@@ -80,6 +80,9 @@ GitHub 上已有的华为健康 MCP 基本都是 **从华为云取数据**（官
 
 AI 和手机要在同一个局域网（或者用 Tailscale 之类的组网）。不能设置请求头的客户端可以用 `…/mcp?token=<口令>`。
 
+5. 想把数据留一份自己的？「导出数据」那张卡点一下：会往手机的 `Download/HuaweiBandBridge/`
+   写一个原样打包的 JSON + 每个存档一个 CSV（按日期摊平，Excel 能直接开）。只写本机，不上传。
+
 ### MCP 工具
 
 | 工具 | 干什么 |
@@ -104,6 +107,7 @@ app/                        一屏 UI + 前台服务 + 手机上的 MCP 服务
   McpServer                   手机上的 MCP（Streamable HTTP，POST /mcp，Bearer 口令）
   BandTools                   6 个工具的实现：读本机存档，回答带记录时间和粒度
   WeatherFetch                天气（Open-Meteo，只发粗位置）
+  DataExport                  数据导出：本机存档 → Download/HuaweiBandBridge（JSON + CSV）
   Media · MediaListener       读当前播放（通知使用权），把手环音乐页接上手机播放器
 
 bandcore/                   华为手环协议核心（无 UI、无网络、无华为依赖）
@@ -143,6 +147,23 @@ UI 只读状态。写特征值一律走 `HuaweiLink` 内部的队列，一次一
 - MCP 服务在手机本机监听 8848 端口，随机 Bearer 口令鉴权；**不要映射到公网**，
   建议只在同一局域网（或 Tailscale 之类的组网）里用。
 - 卸载 App 就清干净：身份、口令、数据全在 App 私有目录和 SharedPreferences 里。
+- 「导出数据」写出的文件也只落在手机本地存储（Download 目录或 App 外部目录），App 不会上传它们。
+
+## 测试 / 开发
+
+协议层（TLV、帧、CRC16、分片、时间换算）有**离线自测**，不需要手环、不需要 Android SDK、不联网：
+
+```powershell
+.\selftest.ps1      # Windows
+./selftest.sh       # Linux / macOS / Git Bash
+```
+
+只用 JDK 17+（项目用 JDK 21）跑 `javac` + `java`，当前 **168 项检查**（TLV 编解码与边界、CRC16 对照独立实现、
+帧头/长度/半包/分片重组、`PacketAssembler` 喂包、`HuaweiUtil` 时间换算）。测什么、测不到什么（蓝牙链路、
+认证、加密 KAT 都还没覆盖）写在 **[docs/TESTING.md](docs/TESTING.md)**，请先读那篇再改协议代码。
+
+`.github/workflows/build.yml` 在 push / PR 时跑自测 + `:app:assembleDebug` 并把 APK 传成 artifact；
+**这个 workflow 还没在 GitHub 上真实跑过**（本机无法验证 Actions），第一次运行可能要小修。
 
 ## 当库用（给自己写 App 的人）
 
