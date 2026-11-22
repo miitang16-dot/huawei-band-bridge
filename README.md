@@ -3,123 +3,80 @@
 **让 AI 直接读你的华为手环 —— 不用华为运动健康、不用华为账号、数据不上任何云。**
 *Let your AI read your Huawei band directly: no Huawei Health app, no Huawei ID, no cloud.*（[English](README.en.md)）
 
-> 🧪 **0.1 测试版。** 协议核心在真机（HUAWEI Band 10）上跑通；App 和 MCP 服务刚写好，正在真机测试。
-> 0.1.1 起多了「心跳直播」：按一下测 60 秒，能看到这一分钟里**一拍一拍**的心率（详见下面）。
-> 0.1.2 起多了**「健康」页**：跟 Nexus 健康页同一套视觉 —— 横幅、六块概览、心率折线、睡眠分期条、
-> 压力情绪时间线、步数柱状（**页面渲染还没上真机看过**，见文末「健康页」）。
+> 🧪 **0.1 测试版**（当前 0.1.3）。协议核心在一台 HUAWEI Band 10 上跑通，App 和 MCP 服务在逐项真机验证；
+> 没在真机验过的功能在下面标了 `[IMPLEMENTED]` / 未验证，不夸大成「已验证」。
 
 <img src="docs/screenshots/main-heart-rate.jpg" width="320" alt="手环桥主界面：连接状态 + 心跳直播（逐拍心率）">
 
-*真机截图（HUAWEI Band 10 + 鸿蒙手机）：连着、电量、心跳直播逐拍读数 —— `lag 估计 0 ms` 说明包到的时候那一下心跳刚好发生。*
+*真机截图（HUAWEI Band 10 + HarmonyOS 手机）：连着、电量、心跳直播逐拍读数 —— 那次 `lag 估计 0 ms`。*
 
-## 下载 / 版本
+## 这是什么（3 行）
+
+1. 一个 **Android App**：用蓝牙直接跟华为手环说华为自己的私有协议（含 HiChain 认证），把心率 / 血氧 /
+   步数 / 科学睡眠 / 压力 / 情绪存在**手机本机**；
+2. 手机上同时开一个 **MCP 服务**（7 个工具），让 Claude、Cursor 等 AI 客户端查你的数据；
+3. 还能反过来把**天气**送进手环、让**手环音乐页控制手机播放器**。
+
+不需要华为账号，也不用华为运动健康 —— 相反，手环要先跟华为运动健康**解绑**才能让第三方 App 连。
+
+## 支持什么设备（兼容性矩阵）
+
+| 设备 / 环境 | 状态 |
+|---|---|
+| HUAWEI Band 10（`Nora-B19FP`）+ HarmonyOS 7 手机 | **已实测**：认证、初始化、分钟数据、TruSleep、压力、情绪、逐拍心率 |
+| 其它 Band 型号（Band 9 / 11 等） | **未验证**。命令表是连上后探测的，理论上可适配，但差异要逐型号摸 |
+| 其它固件版本（同型号） | **未验证**。华为更新固件可能改协议 |
+| Honor Watch 5（PAKE / STS） | **部分移植**：算法在 `HiChainPakeUtils`，`AuthFlow` 还没接上调度 |
+| 手机系统 | **只支持 Android 8.0+**（含 HarmonyOS 的 Android 兼容层）；iOS 不支持 |
+| 被别的 App 当库嵌入（比如 Capacitor 插件） | **未验证**：`bandcore` 按「可复用库」写，但本仓库只演示 `app/` 这一个壳 |
+
+## 能拿到什么（证据分级）
+
+证据等级：`[VERIFIED]` 真机验证过 · `[IMPLEMENTED]` 已实现、未充分验证 · `[INFERRED]` 源码/协议推断 ·
+`[UNSUPPORTED]` 已确认不支持。长文与实验记录见 [`docs/reverse-engineering.md`](docs/reverse-engineering.md)。
+
+| 数据 / 能力 | 粒度 | 证据 |
+|---|---|---|
+| 心率 / 血氧 / 步数 / 静息心率 | 每分钟一格（手环**记录**粒度，不是 App 拉取粒度） | `[VERIFIED]` |
+| 科学睡眠 TruSleep | 每分钟阶段：深睡 / 浅睡 / 快速眼动 / 清醒 + 睡眠分 | `[VERIFIED]` |
+| 压力 | 手环自测（要先在 App 里静坐校准 1 分钟） | `[VERIFIED]` |
+| 情绪 | 手环自测的原始值（愉悦度 / 激活度 / 状态码） | `[VERIFIED]` |
+| 手环自带的情绪页 | 需要华为运动健康 + 华为云算法 | `[UNSUPPORTED]` |
+| 逐拍心率（心跳直播） | 一拍一个值（≈1 秒），走 `0x19` RRI 流 | `[VERIFIED]`，但「实时性」措辞见下 |
+| 实时心率（`0x07/0x1C`） | — | `[UNSUPPORTED]`：Band 10 命令表里没有，Gadgetbridge 也无实现 |
+| 天气 → 手环 | 每小时 / 手环来要时 | `[IMPLEMENTED]` |
+| 手环音乐页 → 手机播放器 | 实时（播放 / 暂停 / 上一首 / 下一首 / 音量） | `[IMPLEMENTED]` |
+| 手机健康页可视化 | 横幅 + 六块概览 + 四个图表分区 | `[IMPLEMENTED]`（渲染未上真机） |
+| 数据导出 | JSON + 每类一份 CSV | `[IMPLEMENTED]`（写盘未上真机） |
+
+**逐拍心率的措辞要准确**：两次真机测量都是 **87 拍 / 丢弃 109 个样本（样本合计 196）** 和
+**279 拍 / 337（616）**，`lag ≈ 0 ms` —— 这与「逐拍实时推送」相符，但**不能单独排除**手环在
+≤1 个包内做缓冲 / 成对推送（要看每包样本数）。「丢」是手环标为无效的样本（`sqi=0` 或间期离谱），
+**不是漏掉的心跳**。详见 [`docs/reverse-engineering.md` §4](docs/reverse-engineering.md) 和
+[`docs/lab/hrlive-0x19.md`](docs/lab/hrlive-0x19.md)。
+
+## 下载 / 安装
 
 | 版本 | 文件 | 说明 |
 |---|---|---|
-| `0.1.2`（2026-11-23） | [`dist/huawei-band-bridge-0.1.2-debug.apk`](dist/huawei-band-bridge-0.1.2-debug.apk) | 加「健康」页（横幅 / 六块概览 / 心率折线 / 睡眠分期 / 压力情绪 / 步数柱状）；心跳直播的「丢掉」拆成可解释的两类，debug 签名 |
-| `0.1.1`（2026-11-23） | [`dist/huawei-band-bridge-0.1.1-debug.apk`](dist/huawei-band-bridge-0.1.1-debug.apk) | 加了「心跳直播」+ MCP 工具 `band_hr_live`，debug 签名 |
-| `0.1.0`（2026-11-22） | [`dist/huawei-band-bridge-0.1-debug.apk`](dist/huawei-band-bridge-0.1-debug.apk) | 第一个测试包，debug 签名 |
+| `0.1.3`（2026-11-23） | [`dist/huawei-band-bridge-0.1.3-debug.apk`](dist/huawei-band-bridge-0.1.3-debug.apk) | 修日志里的密钥泄露；心跳卡显示「有效 / 丢弃 / 样本合计 / 包数」；其余同 0.1.2 |
+| `0.1.2`（2026-11-23） | [`dist/huawei-band-bridge-0.1.2-debug.apk`](dist/huawei-band-bridge-0.1.2-debug.apk) | 加「健康」页；心跳直播的「丢掉」拆成 `sqi0` / `范围` 两类 |
+| `0.1.1`（2026-11-23） | [`dist/huawei-band-bridge-0.1.1-debug.apk`](dist/huawei-band-bridge-0.1.1-debug.apk) | 加「心跳直播」+ MCP 工具 `band_hr_live` |
+| `0.1.0`（2026-11-22） | [`dist/huawei-band-bridge-0.1-debug.apk`](dist/huawei-band-bridge-0.1-debug.apk) | 第一个测试包 |
 
-- **最省事的下载方式**：[Releases](https://github.com/miitang16-dot/huawei-band-bridge/releases) 页直接点 APK（附件形式，手机上点一下就下；`dist/` 里那份是同一个文件，只是 GitHub 的 raw 域名在国内常常连不上）。
-- 也可以点上面表格里的链接（GitHub 页面上是 `dist/` 里的文件，用「Download raw file」也能下）。
-- 安装步骤、已验证 / 未验证清单、校验值（MD5 / SHA-256）、构建方式：0.1.2 看
-  [`RELEASE-0.1.2.md`](RELEASE-0.1.2.md)，0.1.1 看 [`RELEASE-0.1.1.md`](RELEASE-0.1.1.md)，
-  0.1.0 看 [`RELEASE-0.1.md`](RELEASE-0.1.md)。
-  路线图和已知限制见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
-- debug 签名，不能覆盖安装到别的签名的包上；装了旧包先卸载。
-- 从源码自己编（JDK 21 + Android SDK 36）：
+1. 手环先跟「华为运动健康」**解绑**（华为 App 里删除设备，或手环恢复出厂）。两边不能同时连。
+2. 装 APK（允许「安装未知来源应用」）。debug 签名：装过别的签名的版本要先卸载。
+3. 打开 App →「连接」，允许「附近的设备」「通知」。第一次连接手环上可能要点确认。
+4. （可选）点「开始校准」静坐 1 分钟，之后手环会自己测压力。
 
-```powershell
-.\gradlew.bat :app:assembleDebug
-# 产物 app\build\outputs\apk\debug\app-debug.apk
-```
+下载：上面的 `dist/` 链接，或 [Releases](https://github.com/miitang16-dot/huawei-band-bridge/releases)
+（GitHub 的 raw 域名在部分网络下不稳）。每个版本的校验值 / 构建方式 / 已验证清单见
+[`RELEASE-0.1.3.md`](RELEASE-0.1.3.md)、[`RELEASE-0.1.2.md`](RELEASE-0.1.2.md)、
+[`RELEASE-0.1.1.md`](RELEASE-0.1.1.md)。
 
-## 它是什么
+## 用 MCP 查数据
 
-一个安卓 App，用蓝牙直接连华为手环（走华为自己的私有协议，跟官方 App 一样完成 HiChain 认证），
-把数据存在手机本机，并在手机上开一个 **MCP 服务**，让支持 MCP 的 AI（Claude、Cursor、各种 AI App…）
-可以查你此刻和过去的健康数据，还能反过来给手环送天气、让手环控制手机音乐。
-
-## 能拿到什么（Band 10 真机验证过）
-
-| 数据 | 粒度 | 说明 |
-|---|---|---|
-| 心率 / 血氧 / 步数 / 静息心率 | 每分钟一格 | 手环按分钟**记录**，App 每分钟同步一次；这是默认粒度 |
-| **心跳直播（逐拍心率）** | **一拍一格（≈1 秒）** | 按一下测 60 秒（可以试 3 分钟）：走手环的逐拍 RRI 流（`0x19`），换算 `60000 / rri`。**延迟还没真机量过**，见下 |
-| 科学睡眠 TruSleep | 每分钟阶段 | 深睡 / 浅睡 / 快速眼动 / 清醒 + 睡眠分，跟手环屏幕逐分钟对得上 |
-| 压力 | 手环自测 | 先在 App 里静坐校准 1 分钟，之后手环自己测，分数 1–99 |
-| 情绪 | 手环自测 | 愉悦度 / 激活度 / 三档状态（手环自带的情绪页仍需华为 App，见下） |
-| 天气 → 手环 | 每小时 | Open-Meteo，只发粗略位置 |
-| 手环音乐页 → 手机播放器 | 实时 | 播放 / 暂停 / 上一首 / 下一首 / 音量 |
-
-### 心跳直播（0.1.1 新增）
-
-手环除了「每分钟一格」的记录，还有一路**逐拍**数据（RRI，服务 `0x19`）：开一次测量，手环会把
-每一拍的心跳间隔推上来，`心率 = 60000 / 间隔`。这一路以前只被拿去算压力（60 秒校准），现在 App 里直接看：
-
-- 点「心跳直播 → 开始」（默认 60 秒；另有 3 分钟档），这段时间手环的光学传感器会一直跑；
-- 卡片上给：当前 bpm、整段平均、已收多少拍、**最近一拍距今多少毫秒**、**lag 估计**、首包延迟、起止时间；
-- **lag = 包到达时间 − 按 RRI 累加出来的最后一拍时刻**。这个数小（几百毫秒～几秒）才是真的「此刻」；
-  大就说明手环是攒一批才推一次，那它更接近「回放这一分钟」；
-- 真实数据（同一台 Band 10 上实测过一次）：**60 秒收到 85 拍**；**lag 还没上真机量**（这一版才把
-  测量从「压力校准」里单独拎出来）；**能不能连着开 3 分钟未验证**，所以界面把 3 分钟那条标了「未验证」；
-- 「丢」= 手环推上来但被判为无效的样本，**不是漏掉的心跳**。0.1.2 起卡片上拆成两类：
-  `sqi0`（手环自己标了这一拍不可信）和 `范围`（间期 <250 ms / >3000 ms）。真机上那一次
-  收到 279 拍、丢 337 条 —— 丢掉比收下多，通常是信号不好 / 没戴紧，不代表心跳没记到；
-- 代价：测量期间不拉分钟数据（跟压力校准一样），测完自动恢复。
-
-MCP 侧对应工具 `band_hr_live`：`seconds` 传了就开一次（5–180 秒），不传就只读当前/最近一次测量；
-没在测时老实返回 `running:false`（`hr_live_not_running`），不会编数字。
-
-## 健康页（0.1.2 新增）
-
-主界面最上面多了一张「健康」卡，点进去是可视化页 —— 跟 Nexus 的健康页同一套视觉（纯系统 View +
-Canvas 自绘，没有第三方库；深色底 + 圆角卡）：
-
-- **顶部横幅**：日期、一句今天（「睡了 8 小时 56 分 · 走了 6,204 步 · 压力正常 · 心情愉悦」）、
-  连接状态、电量、数据到几点、「同步」按钮；
-- **六块概览**：心率（大数字 + 今日小曲线 + 静息）、血氧（+ 今日最低）、步数（+ 目标进度）、
-  睡眠（时长 + 分期条 + 睡眠分）、压力（分数 + 档位小签）、情绪（光球 + 三档文字）——
-  每块都带「这条数据是几点记的」；
-- **四个分区**：① 今日 24 小时心率折线（当前点 + 最高 / 最低 / 平均 / 静息 / 格数）
-  ② 昨晚睡眠分期条（深睡 / 浅睡 / 快速眼动 / 清醒按时间排开 + 各段时长 + 睡时心率血氧）
-  ③ 压力时间线（四档色带 + 每次测量的点 + 档位分布）和情绪色带（愉悦 / 平静 / 不愉悦）
-  ④ 今日步数（总数 + 每小时柱状）；
-- **没有数据就写「还没同步过 —— 点上面『立即同步』」**，不显示假数；同步完自动重画。
-- 数据只读 App 本机的存档（`hw_samples.json` / `hw_trusleep.json` / `hw_stress.json` / `hw_dict_*.json`），
-  不额外跟手环要数据，也没改协议那一侧。
-
-⚠️ **未验证**：这一页的排版 / 图表 / 同步后刷新**还没在真机上看过**（编译通过、`aapt` 版本对、
-健康页的字符串都在 dex 里）。没有截图就是因为还没真机结果 —— 看过再补，不贴假图。
-
-## 跟其它「华为健康 MCP」有什么不同
-
-GitHub 上已有的华为健康 MCP 基本都是 **从华为云取数据**（官方 Health Kit，或逆向华为运动健康的云接口），
-需要华为账号、手环要连着华为运动健康，数据先经过华为云，多为每日汇总。
-
-这里走的是另一条路：**手机直接和手环说话**。
-
-| | 本项目 | 云端方案 |
-|---|---|---|
-| 需要华为运动健康 App | ❌（必须先和它解绑） | ✅ |
-| 需要华为账号 | ❌ | ✅ |
-| 数据经过云 | ❌ 只在你手机上 | ✅ 华为云 |
-| 心率粒度 | 每分钟 + 可按需测一段逐拍 | 多为每日汇总 |
-| 能给手环写东西（天气 / 音乐） | ✅ | ❌ |
-| 历史数据（解绑前的） | ❌ | ✅ |
-| 手环自带的情绪页 | ❌ 显示「App 版本过低」 | ✅ |
-| iPhone | ❌ 只支持安卓 | ✅ |
-
-两条路各有取舍，按自己的需要选。
-
-## 怎么用
-
-1. 手环先和「华为运动健康」**解绑**（见下面的注意事项）。
-2. 装上手环桥 App，点「连接」，允许「附近的设备」「通知」权限。第一次连接时手环上可能要点确认。
-3. （可选）点「开始校准」静坐 1 分钟 —— 之后手环会自己测压力。
-4. 想看一眼此刻的心跳：点「心跳直播 → 开始（1 分钟）」。戴紧手环、安静坐着；卡片上会显示 bpm、
-   已收多少拍、最近一拍距今多久、lag 估计。**lag 很小才是真「此刻」**，大就是在补几秒前的数据。
-5. 「MCP 服务」那张卡里有地址（`http://手机IP:8848/mcp`）和口令，点「复制配置」，粘到你的 AI 客户端：
+「MCP 服务」那张卡里有地址（`http://手机IP:8848/mcp`）和口令，点「复制配置」，粘到 AI 客户端：
 
 ```json
 {
@@ -133,151 +90,94 @@ GitHub 上已有的华为健康 MCP 基本都是 **从华为云取数据**（官
 }
 ```
 
-AI 和手机要在同一个局域网（或者用 Tailscale 之类的组网）。不能设置请求头的客户端可以用 `…/mcp?token=<口令>`。
-
-6. 想看今天的数据：点主界面最上面的「健康」卡 —— 横幅、六块概览、心率折线、睡眠分期、
-   压力情绪时间线、步数柱状都在那一页；返回键回主界面。
-7. 想把数据留一份自己的？「导出数据」那张卡点一下：会往手机的 `Download/HuaweiBandBridge/`
-   写一个原样打包的 JSON + 每个存档一个 CSV（按日期摊平，Excel 能直接开）。只写本机，不上传。
-
-### MCP 工具
+AI 和手机要在同一个局域网（或 Tailscale 之类的组网）。不能设置请求头的客户端可以用 `…/mcp?token=<口令>`。
 
 | 工具 | 干什么 |
 |---|---|
 | `band_status` | 连没连上、型号、电量、最新数据到几点、压力校准了没 |
 | `band_now` | 最新的心率 / 血氧 / 静息心率 / 今天步数 / 压力 / 情绪 / 昨晚睡眠（每项带记录时间） |
-| `band_day` | 某一天或某个时间段的心率 / 血氧 / 步数统计 + 分段序列（长时段自动放粗，写明粒度） |
+| `band_day` | 某天或某时段的心率 / 血氧 / 步数统计 + 分段序列（长时段自动放粗，写明粒度） |
 | `band_sleep` | 某天早上醒来那一觉：入睡 / 醒来、睡眠分、深浅 REM 清醒分钟、睡时心率血氧、阶段时间线 |
 | `band_stress` | 某天手环测的压力（1–99 + 档位） |
 | `band_emotion` | 某天手环测的情绪（愉悦度 / 激活度 / 三档状态） |
-| `band_hr_live` | 心跳直播：逐拍心率。传 `seconds`（5–180）= 现在测一段；不传 = 读当前/最近一次。没在测就说没在测，不编数字 |
+| `band_hr_live` | 逐拍心率：传 `seconds`（5–180）测一段；不传读当前/最近一次。没在测就说没在测 |
 
-没有记录就返回 null / 空，**不会补数**。
+没有记录就返回 null / 空，**不会补数、不会编数**。`band_hr_live` 的字段（固定）：
+`ok / running / bpm / bpm_avg / beats / dropped / dropped_sqi0 / dropped_range / samples / packets /
+window_ms / lag_ms / last_beat_ms_ago / started_at / device / unverified`。
 
-`band_hr_live` 的返回字段（固定，别改名）：`ok` / `running` / `bpm` / `bpm_avg` / `beats` /
-`dropped` / `dropped_sqi0` / `dropped_range` / `window_ms` / `lag_ms` / `last_beat_ms_ago` /
-`started_at`（epoch 毫秒）/ `device` / `unverified`；
-失败是 `{ok:false, running:false, error:"band_not_connected" | "hr_live_not_running" | "bad_request"}`。
-`dropped` 是「手环推上来但被判无效」的样本数（= `dropped_sqi0` + `dropped_range`），不是漏掉的心跳。
+服务安全用法（局域网 + 口令、不要映射公网、泄露后换口令）见 [`SECURITY.md`](SECURITY.md)。
 
-## 架构
-
-两个 Gradle 模块：`bandcore/` 是可以单独用的华为手环协议库，`app/` 是那个 App。
-
-```
-app/                        一屏 UI + 健康页 + 前台服务 + 手机上的 MCP 服务
-  BandService                 常驻前台服务：持有 BandSession 和 MCP 服务，屏幕关掉也连着
-  MainActivity                纯原生 View 的一屏：连接 / 同步 / 校准 / MCP 配置 / 个人资料 / 日志
-  HealthActivity              「健康」页：横幅 / 六块概览 / 四个分区（纯 View + Canvas 自绘，无第三方库）
-  HealthData                  健康页的数据快照：只读本机存档，离线也能看（没有会话也能读文件）
-  Charts                      自绘图表：心率折线 / 睡眠分期条 / 压力时间线 / 情绪色带 / 步数柱状 / 光球
-  McpServer                   手机上的 MCP（Streamable HTTP，POST /mcp，Bearer 口令）
-  BandTools                   7 个工具的实现：读本机存档，回答带记录时间和粒度
-  WeatherFetch                天气（Open-Meteo，只发粗位置）
-  DataExport                  数据导出：本机存档 → Download/HuaweiBandBridge（JSON + CSV）
-  Media · MediaListener       读当前播放（通知使用权），把手环音乐页接上手机播放器
-
-bandcore/                   华为手环协议核心（无 UI、无网络、无华为依赖）
-  transport/HuaweiLink        扫描 → 连接 → 发现服务 → 订阅 FE02 → 写队列（片间 22ms）→ 重连
-  transport/PacketAssembler   攒分片并分发：认证期的包给 AuthFlow，其余当异步包
-  transport/RequestRunner     发一个请求、阻塞等它的响应；支持「流」（0x2C 文件下载）
-  proto/                      帧编解码（magic 0x5A / TLV / AES-ECB·CBC·GCM + HKDF + HMAC）、
-                              CRC16、各 service 的报文类
-  auth/AuthFlow               认证状态机：LinkParams → SecurityNegotiation →
-                              HiChain（PIN+BIND / 重连 op=2）· HiChainLite · Normal
-  auth/AuthState              三个必须持久化的身份（authkey / 伪造的 device_mac / android_id）
-  auth/HiChainPakeUtils       PAKE（Honor Watch 5 那条路）的实现，目前 AuthFlow 没接上
-  data/DeviceInit             认证后初始化：设备信息、对时、电量、命令表、同意协议、
-                              上报已连接、语言 / 日期 / 账号、打开手环的自动测量开关
-  data/StepSync …             各同步器：分钟数据、TruSleep（0x2C 文件下载 + 序列数据解析）、
-                              压力（60 秒 RRI 校准 + 文件）、情绪（P2P 字典同步）、天气、音乐
-  data/HrLiveSession          心跳直播：0x19 逐拍 RRI 流 → 心率（自包含，别的 App / 插件可以直接收）
-  proto/hr/RriBeats           RRI → bpm 的纯逻辑（当前 / 整段平均 / 窗口收缩 / 脏拍过滤，离线自测覆盖）
-  data/*Store                 本机存档（App 私有目录里的 JSON）
-```
-
-**线程模型**：BLE 回调线程只把字节喂给 `PacketAssembler`，绝不做重活；认证、初始化、
-同步全在一个 worker 线程上（`AuthFlow.run()` 阻塞等响应，不能和喂包同线程）；
-UI 只读状态。写特征值一律走 `HuaweiLink` 内部的队列，一次一片，不要自己并发写。
-
-**同步节奏**（连上后 worker 每轮跑一次）：分钟数据每 1 分钟；科学睡眠每 30 分钟；
-压力文件每 30 分钟；情绪每 10 分钟或手环来通知时立刻；天气每小时或手环来要时；
-手环来问手机信息 / 天气 / 音乐，就在同一个循环里回。
-
-**数据流**：手环 →（BLE 私有协议）→ `bandcore` → 本机 JSON 存档 →（MCP，本机 8848 口）→ AI 客户端。
-中间没有服务器。想直接拿库用的看下一节。
-
-## 隐私
-
-- 健康数据（心率、血氧、步数、静息心率、睡眠、压力、情绪）**只存在手机本地**，不上传、不联网。
-- **唯一的联网**是天气：向 Open-Meteo 取当前 / 预报天气发给手环，只发经纬度四舍五入到 0.1°
-  （约 10 km）的粗略位置，不带身份信息，不需要任何 key。
-- 不需要华为账号，不用华为运动健康（反而要跟它解绑）。没有广告、没有统计、没有第三方 SDK。
-- MCP 服务在手机本机监听 8848 端口，随机 Bearer 口令鉴权；**不要映射到公网**，
-  建议只在同一局域网（或 Tailscale 之类的组网）里用。
-- 卸载 App 就清干净：身份、口令、数据全在 App 私有目录和 SharedPreferences 里。
-- 「导出数据」写出的文件也只落在手机本地存储（Download 目录或 App 外部目录），App 不会上传它们。
-
-## 测试 / 开发
-
-协议层（TLV、帧、CRC16、分片、时间换算）有**离线自测**，不需要手环、不需要 Android SDK、不联网：
+## 构建 / 测试
 
 ```powershell
-.\selftest.ps1      # Windows
-./selftest.sh       # Linux / macOS / Git Bash
+$env:JAVA_HOME='D:\dev\jdk-21.0.13.0.2+1'   # JDK 21
+$env:ANDROID_HOME='D:\dev\android-sdk'
+.\gradlew.bat :app:assembleDebug             # 产物 app\build\outputs\apk\debug\app-debug.apk
+.\selftest.ps1                               # 纯协议层离线自测，不需要手环 / Android SDK
 ```
 
-只用 JDK 17+（项目用 JDK 21）跑 `javac` + `java`，当前 **251 项检查**（TLV 编解码与边界、CRC16 对照独立实现、
-帧头/长度/半包/分片重组、`PacketAssembler` 喂包、`HuaweiUtil` 时间换算、`RriBeats` 的间期→心率换算与窗口）。
-测什么、测不到什么（蓝牙链路、认证、加密 KAT 都还没覆盖）写在 **[docs/TESTING.md](docs/TESTING.md)**，请先读那篇再改协议代码。
+- 离线自测当前 **251 项**，覆盖 TLV / 帧 / CRC / 分片 / 时间换算 / RRI 换算与丢弃分类；
+  测不到什么见 [`docs/TESTING.md`](docs/TESTING.md)。
+- CI：`.github/workflows/build.yml`（push / PR 跑自测 + `assembleDebug`）；**未在 GitHub 上实跑验证过**。
 
-`.github/workflows/build.yml` 在 push / PR 时跑自测 + `:app:assembleDebug` 并把 APK 传成 artifact；
-**这个 workflow 还没在 GitHub 上真实跑过**（本机无法验证 Actions），第一次运行可能要小修。
+## 架构：可复用的协议库 + 一个参考实现
 
-## 当库用（给自己写 App 的人）
+本仓库是两层：
 
-`bandcore/` 是一个独立的 Android 库。核心是 `BandSession`：
+- **`bandcore/`：可复用的华为手环协议库**。不依赖 `app` 模块、不依赖 UI；只有 BLE 传输层需要 `Context`。
+  核心入口是 `BandSession`（扫描 → 认证 → 初始化 → 每分钟同步）与各 Store / Sync / HrLiveSession。
+- **`app/`：参考实现**。一屏操作界面 + 「健康」页 + 前台服务 + 手机上的 MCP 服务，
+  用来演示 `bandcore` 能做什么，也是日常用的那个 App。
 
 ```java
 BandSession s = new BandSession(context, new BandSession.Hooks() {
-    @Override public void onData(int newSamples) { /* 新数据进来了 */ }
-    @Override public JSONObject weather() { return myWeather; }          // 可选：给手环的天气
-    @Override public void musicButton(int b) { /* 手环音乐页按键 */ }      // 可选
+    @Override public void onData(int newSamples) { /* 新数据 */ }
+    @Override public JSONObject weather() { return myWeather; }        // 可选：给手环的天气
+    @Override public void musicButton(int b) { /* 手环音乐页按键 */ }    // 可选
 });
-s.start();                       // 扫描 → 认证 → 初始化 → 每分钟同步
-s.samples().query(fromSec, toSec);   // 心率 / 血氧 / 步数
-s.truSleep().query(fromMs, toMs);    // 科学睡眠
-s.stress().query(fromMs, toMs);      // 压力
-s.emotion().query(fromMs, toMs);     // 情绪
-
-// 心跳直播（逐拍 0x19 流）：回调给你 bpm / bpmAvg / beats / lagMs / lastBeatMsAgo
-s.hrLiveStart(60, (bpm, bpmAvg, beats, lagMs, lastBeatMsAgo) -> { });
-HrLiveSession.Snapshot live = s.hrLiveSnapshot();   // 结束后也留着最后一次
+s.start();                                    // 扫描 → 认证 → 初始化 → 每分钟同步
+s.samples().query(fromSec, toSec);            // 心率 / 血氧 / 步数 / 静息心率
+s.truSleep().query(fromMs, toMs);             // 科学睡眠
+s.stress().query(fromMs, toMs);               // 压力
+s.emotion().query(fromMs, toMs);              // 情绪
+s.hrLiveStart(60, (bpm, avg, beats, lagMs, lastBeatMsAgo) -> { });   // 心跳直播（逐拍）
+HrLiveSession.Snapshot live = s.hrLiveSnapshot();                    // 结束后也留着最后一次
 ```
 
-只想要「RRI → 心率」这段纯计算（不连手环）？用 `proto/hr/RriBeats`，不依赖 Android。
+数据流：手环 →（BLE 私有协议）→ `bandcore` → 本机 JSON 存档 →（MCP，本机 8848 口）→ AI 客户端。
+**中间没有服务器。** 代码结构与协议细节见 [`docs/reverse-engineering.md`](docs/reverse-engineering.md)。
 
-## ⚠️ 用之前要知道
+## 当前限制（详情见 [docs/ROADMAP.md](docs/ROADMAP.md)）
 
-- **手环必须先和华为运动健康解绑**（华为 App 里删除设备 / 手环恢复出厂），两边不能同时连。
-- 只支持 **安卓**（8.0+）。App 用常驻通知保持后台连接；点通知里的「断开」或 App 里的「断开」才会停。
-- 同一时间只能有**一个** App 连手环：用手环桥时，别的直连手环的 App 要先断开。
-- 协议是逆向来的，华为更新手环固件后可能失效。
-- 这些数据**不是医疗诊断**。
+- **只支持 Android 8.0+**，没有 iOS。
+- 手环必须跟华为运动健康解绑，且同一时间只能有一个 App 连它。
+- **不是实时心率**：手环约每分钟记一格；逐拍流能按需测一段，但不是「一直开着看心跳」。
+- 手环自带的情绪页打不开（要华为 App + 云端算法）；App / MCP 里的情绪是原始值。
+- 数据保留期：分钟数据 10 天、科学睡眠 60 晚、压力 / 情绪 30 天。
+- 逆向协议：华为更新固件可能失效；Release 包是 debug 签名，不是商店签名。
+- 这些都是健康数据，**不是医疗诊断**。
 
-## 已知的坑（省得你再踩）
+## 安全 / 隐私
 
-- Band 10 走「新同步」：文件下载用服务 `0x2C`，不是 `0x0A`。
-- 科学睡眠阶段码：`1` 浅睡 / `2` 快速眼动 / `3` 深睡 / `4` 清醒。
-- `0x07/0x1c`（Gadgetbridge 所谓「实时心率」）Band 10 **命令表里没有**，而且它本身只是「自动测心率模式」的开关，不推数据。
-  真正能拿逐拍的是 `0x19`（RRI 流，见「心跳直播」）；**它的推送延迟还没真机量过**，别把它当成已经验证的「实时」。
-- 手环只在刚连上时问一次手机信息（`0x01/0x10`），之后不再问。
-- 天气：手环发 `0x0f/0x04` 带 `7f=186AA` 时只回天气、别回「收到」，否则会每 3 秒要一次。
-- HRV 字典 `500044`、皮肤温度 `400012` 在 Band 10 上拿不到。
-- 还没在鸿蒙上验过的事：MCP 服务的本机监听、天气请求（此前别的 App 的原生网络在这台手机上被系统静默拦过）。
+- 健康数据只存手机本地（App 私有目录），不上传、不联网；**唯一的联网**是天气（Open-Meteo，
+  只发四舍五入到 0.1°≈10 km 的粗略位置）。
+- 设备身份（`authkey` / 伪造的 `device_mac` / `android_id`）是本机配对产物，别拷给别人；
+  MCP 口令是本机随机生成的，别把 8848 暴露到公网。
+- 从 0.1.3 起，日志与 `toString` 不再输出任何密钥 / 口令 / 包体内容。
+- 怎么报安全问题、MCP 怎么用才安全：见 [`SECURITY.md`](SECURITY.md)。
+
+## 参与
+
+- 改协议前先读 [`docs/TESTING.md`](docs/TESTING.md)（哪些能离线测、哪些必须上真机）；
+  跑 `./selftest.ps1`（或 `./selftest.sh`）保持全绿。
+- 没有第三方依赖；构建只要 JDK 21 + Android SDK 36。真机结论请附探针（App 日志页）里的证据，
+  不要把推断写成已验证。
 
 ## 致谢 / 许可
 
-协议实现大量移植自 [Gadgetbridge](https://codeberg.org/Freeyourgadget/Gadgetbridge)（AGPL-3.0），
-因此本项目同样以 **AGPL-3.0** 发布，详见 `LICENSE` 和 `NOTICE.md`。
-与华为无关，非官方。
+- 协议实现大量移植自 [Gadgetbridge](https://codeberg.org/Freeyourgadget/Gadgetbridge)（AGPL-3.0），
+  上游版本 `7257742`（2026-11-18）；来源文件保留原版权头，详见 [`NOTICE.md`](NOTICE.md)。
+- 本项目以 **AGPL-3.0** 发布（[`LICENSE`](LICENSE)）：分发或提供网络服务时要给出完整源码。
+- 零第三方运行时依赖（纯 Android SDK / JDK）。
+- 与华为无关，非官方；Huawei / HUAWEI Band / TruSleep 是华为的商标。
