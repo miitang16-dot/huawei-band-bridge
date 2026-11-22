@@ -40,7 +40,7 @@ import java.util.List;
 public class MainActivity extends Activity {
 
     private final Handler h = new Handler(Looper.getMainLooper());
-    private TextView state, data, mcpInfo, calibTxt, musicTxt, log;
+    private TextView state, data, mcpInfo, calibTxt, musicTxt, log, exportTxt;
     private Button connectBtn, mcpBtn, calibBtn;
     private boolean showToken = false;
     private int ink, sub, card, accent;
@@ -128,12 +128,20 @@ public class MainActivity extends Activity {
             } catch (Throwable t) { toast("填得不对，检查一下数字和日期格式"); }
         });
 
+        /* 导出 */
+        LinearLayout c7 = card(col, "导出数据");
+        exportTxt = text("把本机存档导出成 JSON（原样打包）+ CSV（按日期摊平，Excel 能开）。只写本机，不上传。", 13, ink, false);
+        exportTxt.setTextIsSelectable(true);
+        c7.addView(exportTxt);
+        button(c7, "导出 JSON + CSV", v -> exportData());
+        c7.addView(note("Android 10+ 写到「Download/HuaweiBandBridge」；Android 8/9 写到 App 自己的外部目录（都不用存储权限）。"));
+
         /* 日志 */
-        LinearLayout c7 = card(col, "日志（排查问题用，只在本机）");
+        LinearLayout c8 = card(col, "日志（排查问题用，只在本机）");
         log = text("", 11, sub, false);
         log.setTypeface(Typeface.MONOSPACE);
         log.setTextIsSelectable(true);
-        c7.addView(log);
+        c8.addView(log);
 
         askPermissions();
     }
@@ -160,6 +168,26 @@ public class MainActivity extends Activity {
         BandService s = BandService.instance;
         if (s != null) { if (on) s.startMcp(); else s.stopMcp(); }
         refresh();
+    }
+
+    /** 导出本机存档（JSON + CSV）。读文件 + 写下载目录都在工作线程，UI 只更新结果文字。 */
+    private void exportData() {
+        exportTxt.setText("导出中…");
+        new Thread(() -> {
+            try {
+                DataExport.Result result = DataExport.export(this);
+                runOnUiThread(() -> {
+                    exportTxt.setText(result.summary());
+                    toast(result.written.isEmpty() ? "还没有数据可导出" : "导出好了");
+                });
+            } catch (Throwable t) {
+                String message = String.valueOf(t);
+                runOnUiThread(() -> {
+                    exportTxt.setText("导出失败：" + message);
+                    toast("导出失败，换到「日志」看原因");
+                });
+            }
+        }, "band-export").start();
     }
 
     private void copyConfig() {
