@@ -8,3 +8,5 @@ captures/
 *.aab
 *.keystore
 *.jks
+# test builds that are committed on purpose (see RELEASE-0.1.md)
+!dist/*.apk
