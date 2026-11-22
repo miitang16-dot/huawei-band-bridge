@@ -1,14 +1,14 @@
 # Huawei Band Bridge · 手环桥
 
-**让 AI 直接读你的华为手环 —— 不用华为运动健康、不用华为账号、数据不上任何云。**
+**让 AI 直接读你的华为手环。不用华为运动健康，不用华为账号，数据不上任何云。**
 *Let your AI read your Huawei band directly: no Huawei Health app, no Huawei ID, no cloud.*（[English](README.en.md)）
 
-> 🧪 **0.1 测试版**（当前 0.1.3）。协议核心在一台 HUAWEI Band 10 上跑通，App 和 MCP 服务在逐项真机验证；
-> 没在真机验过的功能在下面标了 `[IMPLEMENTED]` / 未验证，不夸大成「已验证」。
+> 🧪 **测试版**（当前 0.1.4）。协议核心在一台 HUAWEI Band 10 上跑通了，App 和 MCP 服务还在逐项上真机验证。
+> 下面每一项都标了证据等级，没在真机上验过的不会写成「已验证」。
 
-<img src="docs/screenshots/main-heart-rate.jpg" width="320" alt="手环桥主界面：连接状态 + 心跳直播（逐拍心率）">
+<img src="docs/screenshots/main-heart-rate.jpg" width="320" alt="手环桥 0.1.1 主界面：连接状态和心跳直播的逐拍读数">
 
-*真机截图（HUAWEI Band 10 + HarmonyOS 手机）：连着、电量、心跳直播逐拍读数 —— 那次 `lag 估计 0 ms`。*
+*0.1.1 的真机截图（HUAWEI Band 10 + HarmonyOS 手机），那次心跳直播的 lag 估计是 0 ms。0.1.4 换了新界面，新截图等真机验完再补。*
 
 ## 这是什么（3 行）
 
@@ -59,6 +59,7 @@
 
 | 版本 | 文件 | 说明 |
 |---|---|---|
+| `0.1.4`（2026-11-23） | [`dist/huawei-band-bridge-0.1.4-debug.apk`](dist/huawei-band-bridge-0.1.4-debug.apk) | 界面重做：跟随深浅色、顶栏不再压状态栏、App 图标；协议没改 |
 | `0.1.3`（2026-11-23） | [`dist/huawei-band-bridge-0.1.3-debug.apk`](dist/huawei-band-bridge-0.1.3-debug.apk) | 修日志里的密钥泄露；心跳卡显示「有效 / 丢弃 / 样本合计 / 包数」；其余同 0.1.2 |
 | `0.1.2`（2026-11-23） | [`dist/huawei-band-bridge-0.1.2-debug.apk`](dist/huawei-band-bridge-0.1.2-debug.apk) | 加「健康」页；心跳直播的「丢掉」拆成 `sqi0` / `范围` 两类 |
 | `0.1.1`（2026-11-23） | [`dist/huawei-band-bridge-0.1.1-debug.apk`](dist/huawei-band-bridge-0.1.1-debug.apk) | 加「心跳直播」+ MCP 工具 `band_hr_live` |
@@ -71,7 +72,7 @@
 
 下载：上面的 `dist/` 链接，或 [Releases](https://github.com/miitang16-dot/huawei-band-bridge/releases)
 （GitHub 的 raw 域名在部分网络下不稳）。每个版本的校验值 / 构建方式 / 已验证清单见
-[`RELEASE-0.1.3.md`](RELEASE-0.1.3.md)、[`RELEASE-0.1.2.md`](RELEASE-0.1.2.md)、
+[`RELEASE-0.1.4.md`](RELEASE-0.1.4.md)、[`RELEASE-0.1.3.md`](RELEASE-0.1.3.md)、[`RELEASE-0.1.2.md`](RELEASE-0.1.2.md)、
 [`RELEASE-0.1.1.md`](RELEASE-0.1.1.md)。
 
 ## 用 MCP 查数据
@@ -103,23 +104,24 @@ AI 和手机要在同一个局域网（或 Tailscale 之类的组网）。不能
 | `band_hr_live` | 逐拍心率：传 `seconds`（5–180）测一段；不传读当前/最近一次。没在测就说没在测 |
 
 没有记录就返回 null / 空，**不会补数、不会编数**。`band_hr_live` 的字段（固定）：
-`ok / running / bpm / bpm_avg / beats / dropped / dropped_sqi0 / dropped_range / samples / packets /
-window_ms / lag_ms / last_beat_ms_ago / started_at / device / unverified`。
+`ok / running / bpm / bpm_avg / beats / dropped / dropped_sqi0 / dropped_range /
+samples / packets / window_ms / lag_ms / last_beat_ms_ago / started_at / device / unverified`。
 
 服务安全用法（局域网 + 口令、不要映射公网、泄露后换口令）见 [`SECURITY.md`](SECURITY.md)。
 
 ## 构建 / 测试
 
 ```powershell
-$env:JAVA_HOME='D:\dev\jdk-21.0.13.0.2+1'   # JDK 21
-$env:ANDROID_HOME='D:\dev\android-sdk'
+$env:JAVA_HOME='C:\path\to\jdk-21'
+$env:ANDROID_HOME='C:\path\to\android-sdk'
 .\gradlew.bat :app:assembleDebug             # 产物 app\build\outputs\apk\debug\app-debug.apk
 .\selftest.ps1                               # 纯协议层离线自测，不需要手环 / Android SDK
 ```
 
 - 离线自测当前 **251 项**，覆盖 TLV / 帧 / CRC / 分片 / 时间换算 / RRI 换算与丢弃分类；
   测不到什么见 [`docs/TESTING.md`](docs/TESTING.md)。
-- CI：`.github/workflows/build.yml`（push / PR 跑自测 + `assembleDebug`）；**未在 GitHub 上实跑验证过**。
+- CI：`.github/workflows/build.yml`（push / PR 跑自测 + `assembleDebug`）。自测 job 在 GitHub 上跑通了；
+  构建 job 之前卡在安装 Android SDK 那一步，0.1.4 改成用运行环境自带的 SDK。
 
 ## 架构：可复用的协议库 + 一个参考实现
 
@@ -127,7 +129,7 @@ $env:ANDROID_HOME='D:\dev\android-sdk'
 
 - **`bandcore/`：可复用的华为手环协议库**。不依赖 `app` 模块、不依赖 UI；只有 BLE 传输层需要 `Context`。
   核心入口是 `BandSession`（扫描 → 认证 → 初始化 → 每分钟同步）与各 Store / Sync / HrLiveSession。
-- **`app/`：参考实现**。一屏操作界面 + 「健康」页 + 前台服务 + 手机上的 MCP 服务，
+- **`app/`：参考实现**。主界面 + 「健康」页 + 前台服务 + 手机上的 MCP 服务，
   用来演示 `bandcore` 能做什么，也是日常用的那个 App。
 
 ```java

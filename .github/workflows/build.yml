@@ -5,8 +5,8 @@
 #   build —— JDK 21 + Android SDK 编 debug APK，并把 APK 作为 artifact 上传
 #
 # 不引用任何 secrets；所有依赖都是 GitHub 官方 action 和公开的 Android SDK 包。
-# 注意：截至提交时这个 workflow 还没有在 GitHub 上真实跑过（本机无法验证 Actions），
-# 第一次真实运行可能还需要小修（比如 sdkmanager 的包名）。
+# Android SDK 用 ubuntu-latest 自带的那份（$ANDROID_HOME），不再用 android-actions/setup-android
+#（那一步在 GitHub 上实跑时失败过）。
 name: build
 
 on:
@@ -46,11 +46,11 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install platform and build-tools
-        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+      - name: Install platform and build-tools (preinstalled SDK)
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-36" "build-tools;36.0.0"
 
       - name: Build debug APK
         run: |
