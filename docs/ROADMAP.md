@@ -64,6 +64,12 @@ Gadgetbridge 的源码是这条路的起点（AGPL-3.0，见 `NOTICE.md`），�
       MCP 地址口令（复制配置）/ 个人资料 / 日志查看
 - [x] 「心跳直播」卡片（0.1.1）：BPM、整段平均、已收拍数、**最近一拍距今 ms**、**lag 估计**、
       首包延迟、起止时间；1 分钟档 + 3 分钟档（后标「未验证」）；测完保留最后一次结果
+- [x] **「健康」页（0.1.2）**：跟 Nexus 健康页同一套视觉（纯系统 View + Canvas 自绘，无第三方库，
+      深色底 + 圆角卡）—— 横幅（型号 / 电量 / 数据时间 / 同步）、六块概览（心率 + 今日小曲线 /
+      血氧 / 步数 + 目标进度 / 睡眠 + 分期条 / 压力 + 档位 / 情绪光球）、四个分区（24h 心率折线、
+      睡眠分期条、压力时间线与情绪色带、每小时步数柱状）。数据只读本机存档（`HealthData`），
+      离线也能看；没数据写「还没同步过」，不显示假数；同步完自动刷新。
+      —— 编译通过、字符串进了 APK，**排版 / 图表 / 刷新还没上真机看过（未验证）**
 - [x] 手机上的 MCP 服务（`McpServer`）：Streamable HTTP，`POST /mcp`，JSON-RPC 2.0
       （initialize / ping / tools/list / tools/call），Bearer 口令或 `?token=`，无第三方库
 - [x] 7 个 MCP 工具：`band_status` / `band_now` / `band_day` / `band_sleep` / `band_stress` / `band_emotion` / `band_hr_live`
@@ -79,8 +85,9 @@ Gadgetbridge 的源码是这条路的起点（AGPL-3.0，见 `NOTICE.md`），�
 - [x] 两个 Gradle 模块（`bandcore` 库 + `app`），AGP 8.13.0 / Gradle 8.14.3 / JDK 21，编译通过，
       干净重建产物可复现（见 `RELEASE-0.1.md`）
 - [x] **纯协议层离线自测**：`selftest.ps1` / `selftest.sh`，零依赖（只用 JDK 的 `javac` + `java`，
-      不需要手环 / Android SDK / 网络），235 项检查覆盖 TLV 编解码与边界、CRC16（对照独立实现）、
-      帧头 / 长度 / 半包 / 分片重组、`PacketAssembler` 喂包、时间换算、`RriBeats` 的间期→心率与窗口。
+      不需要手环 / Android SDK / 网络），251 项检查覆盖 TLV 编解码与边界、CRC16（对照独立实现）、
+      帧头 / 长度 / 半包 / 分片重组、`PacketAssembler` 喂包、时间换算、`RriBeats` 的间期→心率与窗口
+      以及「丢掉」的两类拆分（sqi=0 / 间期离谱）。
       见 `docs/TESTING.md`（也写清了蓝牙链路、认证、加密 KAT 这些都还测不到）
 - [x] GitHub Actions：`.github/workflows/build.yml`，push / PR 时跑自测 + `:app:assembleDebug`，
       APK 作为 artifact 上传 —— **未在 GitHub 上实跑验证**（本机无法验证 Actions，第一次跑可能还要小修）
@@ -102,6 +109,9 @@ Gadgetbridge 的源码是这条路的起点（AGPL-3.0，见 `NOTICE.md`），�
       - 再点「试 3 分钟」，看 `end | reason=` 是 `timeup` 还是 `no-data`（后者 = 手环不肯开那么久）。
 - [ ] 在 Band 10 + 鸿蒙手机上把 `dist/` 那个包完整走一遍：首次配对（PIN 分支）→ 分钟同步 →
       科学睡眠 → 压力校准 → 心跳直播 → 情绪 → 天气 → 音乐 → 掉线重连 → 杀进程后重开
+- [ ] **健康页真机看一遍（0.1.2）**：主界面「健康」卡进得去、返回回得来；六块数字和
+      `band_now` 对得上；心率折线 / 睡眠分期条 / 压力时间线 / 情绪色带 / 步数柱状画得对；
+      点「同步」后整页刷新；没有数据时是「还没同步过」而不是假数 —— 看完补截图进 README
 - [ ] 用真实 AI 客户端（Claude Desktop / Cursor / 自写脚本）接上 MCP，7 个工具逐条调一遍
 - [ ] 把真机 `Probe` 日志里失败的分支记下来，按原因修（参考 `README` 的「已知的坑」）
 - [ ] 截图（App 一屏 + MCP 配置）放进 README

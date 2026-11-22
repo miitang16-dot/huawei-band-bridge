@@ -5,6 +5,8 @@
 
 > 🧪 **0.1 测试版。** 协议核心在真机（HUAWEI Band 10）上跑通；App 和 MCP 服务刚写好，正在真机测试。
 > 0.1.1 起多了「心跳直播」：按一下测 60 秒，能看到这一分钟里**一拍一拍**的心率（详见下面）。
+> 0.1.2 起多了**「健康」页**：跟 Nexus 健康页同一套视觉 —— 横幅、六块概览、心率折线、睡眠分期条、
+> 压力情绪时间线、步数柱状（**页面渲染还没上真机看过**，见文末「健康页」）。
 
 <img src="docs/screenshots/main-heart-rate.jpg" width="320" alt="手环桥主界面：连接状态 + 心跳直播（逐拍心率）">
 
@@ -14,13 +16,15 @@
 
 | 版本 | 文件 | 说明 |
 |---|---|---|
+| `0.1.2`（2026-11-23） | [`dist/huawei-band-bridge-0.1.2-debug.apk`](dist/huawei-band-bridge-0.1.2-debug.apk) | 加「健康」页（横幅 / 六块概览 / 心率折线 / 睡眠分期 / 压力情绪 / 步数柱状）；心跳直播的「丢掉」拆成可解释的两类，debug 签名 |
 | `0.1.1`（2026-11-23） | [`dist/huawei-band-bridge-0.1.1-debug.apk`](dist/huawei-band-bridge-0.1.1-debug.apk) | 加了「心跳直播」+ MCP 工具 `band_hr_live`，debug 签名 |
 | `0.1.0`（2026-11-22） | [`dist/huawei-band-bridge-0.1-debug.apk`](dist/huawei-band-bridge-0.1-debug.apk) | 第一个测试包，debug 签名 |
 
 - **最省事的下载方式**：[Releases](https://github.com/miitang16-dot/huawei-band-bridge/releases) 页直接点 APK（附件形式，手机上点一下就下；`dist/` 里那份是同一个文件，只是 GitHub 的 raw 域名在国内常常连不上）。
 - 也可以点上面表格里的链接（GitHub 页面上是 `dist/` 里的文件，用「Download raw file」也能下）。
-- 安装步骤、已验证 / 未验证清单、校验值（MD5 / SHA-256）、构建方式：0.1.1 看
-  [`RELEASE-0.1.1.md`](RELEASE-0.1.1.md)，0.1.0 看 [`RELEASE-0.1.md`](RELEASE-0.1.md)。
+- 安装步骤、已验证 / 未验证清单、校验值（MD5 / SHA-256）、构建方式：0.1.2 看
+  [`RELEASE-0.1.2.md`](RELEASE-0.1.2.md)，0.1.1 看 [`RELEASE-0.1.1.md`](RELEASE-0.1.1.md)，
+  0.1.0 看 [`RELEASE-0.1.md`](RELEASE-0.1.md)。
   路线图和已知限制见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
 - debug 签名，不能覆盖安装到别的签名的包上；装了旧包先卸载。
 - 从源码自己编（JDK 21 + Android SDK 36）：
@@ -59,10 +63,34 @@
   大就说明手环是攒一批才推一次，那它更接近「回放这一分钟」；
 - 真实数据（同一台 Band 10 上实测过一次）：**60 秒收到 85 拍**；**lag 还没上真机量**（这一版才把
   测量从「压力校准」里单独拎出来）；**能不能连着开 3 分钟未验证**，所以界面把 3 分钟那条标了「未验证」；
+- 「丢」= 手环推上来但被判为无效的样本，**不是漏掉的心跳**。0.1.2 起卡片上拆成两类：
+  `sqi0`（手环自己标了这一拍不可信）和 `范围`（间期 <250 ms / >3000 ms）。真机上那一次
+  收到 279 拍、丢 337 条 —— 丢掉比收下多，通常是信号不好 / 没戴紧，不代表心跳没记到；
 - 代价：测量期间不拉分钟数据（跟压力校准一样），测完自动恢复。
 
 MCP 侧对应工具 `band_hr_live`：`seconds` 传了就开一次（5–180 秒），不传就只读当前/最近一次测量；
 没在测时老实返回 `running:false`（`hr_live_not_running`），不会编数字。
+
+## 健康页（0.1.2 新增）
+
+主界面最上面多了一张「健康」卡，点进去是可视化页 —— 跟 Nexus 的健康页同一套视觉（纯系统 View +
+Canvas 自绘，没有第三方库；深色底 + 圆角卡）：
+
+- **顶部横幅**：日期、一句今天（「睡了 8 小时 56 分 · 走了 6,204 步 · 压力正常 · 心情愉悦」）、
+  连接状态、电量、数据到几点、「同步」按钮；
+- **六块概览**：心率（大数字 + 今日小曲线 + 静息）、血氧（+ 今日最低）、步数（+ 目标进度）、
+  睡眠（时长 + 分期条 + 睡眠分）、压力（分数 + 档位小签）、情绪（光球 + 三档文字）——
+  每块都带「这条数据是几点记的」；
+- **四个分区**：① 今日 24 小时心率折线（当前点 + 最高 / 最低 / 平均 / 静息 / 格数）
+  ② 昨晚睡眠分期条（深睡 / 浅睡 / 快速眼动 / 清醒按时间排开 + 各段时长 + 睡时心率血氧）
+  ③ 压力时间线（四档色带 + 每次测量的点 + 档位分布）和情绪色带（愉悦 / 平静 / 不愉悦）
+  ④ 今日步数（总数 + 每小时柱状）；
+- **没有数据就写「还没同步过 —— 点上面『立即同步』」**，不显示假数；同步完自动重画。
+- 数据只读 App 本机的存档（`hw_samples.json` / `hw_trusleep.json` / `hw_stress.json` / `hw_dict_*.json`），
+  不额外跟手环要数据，也没改协议那一侧。
+
+⚠️ **未验证**：这一页的排版 / 图表 / 同步后刷新**还没在真机上看过**（编译通过、`aapt` 版本对、
+健康页的字符串都在 dex 里）。没有截图就是因为还没真机结果 —— 看过再补，不贴假图。
 
 ## 跟其它「华为健康 MCP」有什么不同
 
@@ -107,7 +135,9 @@ GitHub 上已有的华为健康 MCP 基本都是 **从华为云取数据**（官
 
 AI 和手机要在同一个局域网（或者用 Tailscale 之类的组网）。不能设置请求头的客户端可以用 `…/mcp?token=<口令>`。
 
-6. 想把数据留一份自己的？「导出数据」那张卡点一下：会往手机的 `Download/HuaweiBandBridge/`
+6. 想看今天的数据：点主界面最上面的「健康」卡 —— 横幅、六块概览、心率折线、睡眠分期、
+   压力情绪时间线、步数柱状都在那一页；返回键回主界面。
+7. 想把数据留一份自己的？「导出数据」那张卡点一下：会往手机的 `Download/HuaweiBandBridge/`
    写一个原样打包的 JSON + 每个存档一个 CSV（按日期摊平，Excel 能直接开）。只写本机，不上传。
 
 ### MCP 工具
@@ -125,17 +155,22 @@ AI 和手机要在同一个局域网（或者用 Tailscale 之类的组网）。
 没有记录就返回 null / 空，**不会补数**。
 
 `band_hr_live` 的返回字段（固定，别改名）：`ok` / `running` / `bpm` / `bpm_avg` / `beats` /
-`window_ms` / `lag_ms` / `last_beat_ms_ago` / `started_at`（epoch 毫秒）/ `device` / `unverified`；
+`dropped` / `dropped_sqi0` / `dropped_range` / `window_ms` / `lag_ms` / `last_beat_ms_ago` /
+`started_at`（epoch 毫秒）/ `device` / `unverified`；
 失败是 `{ok:false, running:false, error:"band_not_connected" | "hr_live_not_running" | "bad_request"}`。
+`dropped` 是「手环推上来但被判无效」的样本数（= `dropped_sqi0` + `dropped_range`），不是漏掉的心跳。
 
 ## 架构
 
 两个 Gradle 模块：`bandcore/` 是可以单独用的华为手环协议库，`app/` 是那个 App。
 
 ```
-app/                        一屏 UI + 前台服务 + 手机上的 MCP 服务
+app/                        一屏 UI + 健康页 + 前台服务 + 手机上的 MCP 服务
   BandService                 常驻前台服务：持有 BandSession 和 MCP 服务，屏幕关掉也连着
   MainActivity                纯原生 View 的一屏：连接 / 同步 / 校准 / MCP 配置 / 个人资料 / 日志
+  HealthActivity              「健康」页：横幅 / 六块概览 / 四个分区（纯 View + Canvas 自绘，无第三方库）
+  HealthData                  健康页的数据快照：只读本机存档，离线也能看（没有会话也能读文件）
+  Charts                      自绘图表：心率折线 / 睡眠分期条 / 压力时间线 / 情绪色带 / 步数柱状 / 光球
   McpServer                   手机上的 MCP（Streamable HTTP，POST /mcp，Bearer 口令）
   BandTools                   7 个工具的实现：读本机存档，回答带记录时间和粒度
   WeatherFetch                天气（Open-Meteo，只发粗位置）
@@ -192,7 +227,7 @@ UI 只读状态。写特征值一律走 `HuaweiLink` 内部的队列，一次一
 ./selftest.sh       # Linux / macOS / Git Bash
 ```
 
-只用 JDK 17+（项目用 JDK 21）跑 `javac` + `java`，当前 **235 项检查**（TLV 编解码与边界、CRC16 对照独立实现、
+只用 JDK 17+（项目用 JDK 21）跑 `javac` + `java`，当前 **251 项检查**（TLV 编解码与边界、CRC16 对照独立实现、
 帧头/长度/半包/分片重组、`PacketAssembler` 喂包、`HuaweiUtil` 时间换算、`RriBeats` 的间期→心率换算与窗口）。
 测什么、测不到什么（蓝牙链路、认证、加密 KAT 都还没覆盖）写在 **[docs/TESTING.md](docs/TESTING.md)**，请先读那篇再改协议代码。
 

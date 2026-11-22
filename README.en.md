@@ -5,17 +5,21 @@
 
 > 🧪 **0.1 beta.** The protocol core works on a real HUAWEI Band 10; the app and the MCP server are
 > freshly written and still being tested on the device. 0.1.1 adds "heartbeat live": measure for
-> 60 seconds and see **one value per beat** (see below).
+> 60 seconds and see **one value per beat** (see below). 0.1.2 adds a **health page** with the same
+> look as the Nexus health page: hero banner, six tiles, heart-rate line, sleep stages, stress and
+> emotion timelines, steps per hour (**the page has not been rendered on a real device yet**).
 
 ## Download / versions
 
 | Version | File | Notes |
 |---|---|---|
+| `0.1.2` (2026-11-23) | [`dist/huawei-band-bridge-0.1.2-debug.apk`](dist/huawei-band-bridge-0.1.2-debug.apk) | adds the health page (hero / six tiles / heart-rate line / sleep stages / stress + emotion / steps per hour); splits the heartbeat-live "dropped" counter into explainable parts; debug signature |
 | `0.1.1` (2026-11-23) | [`dist/huawei-band-bridge-0.1.1-debug.apk`](dist/huawei-band-bridge-0.1.1-debug.apk) | adds the beat-by-beat "heartbeat live" view + the `band_hr_live` MCP tool, debug signature |
 | `0.1.0` (2026-11-22) | [`dist/huawei-band-bridge-0.1-debug.apk`](dist/huawei-band-bridge-0.1-debug.apk) | first test build, debug signature |
 
 - Install steps, the verified / not-yet-verified list, checksums (MD5 / SHA-256) and how it was built:
-  [`RELEASE-0.1.1.md`](RELEASE-0.1.1.md) for 0.1.1, [`RELEASE-0.1.md`](RELEASE-0.1.md) for 0.1.0.
+  [`RELEASE-0.1.2.md`](RELEASE-0.1.2.md) for 0.1.2, [`RELEASE-0.1.1.md`](RELEASE-0.1.1.md) for 0.1.1,
+  [`RELEASE-0.1.md`](RELEASE-0.1.md) for 0.1.0.
   Roadmap and known limits: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 - Debug signature: you cannot install it over a build with a different signature — uninstall first.
 - Build it yourself (JDK 21 + Android SDK 36):
@@ -63,11 +67,40 @@ now shows it directly:
   on a real device yet** (this release is the first one that pulls the RRI stream out of the stress
   calibration code); **3 minutes has not been verified**, which is why that button is labelled
   "unverified";
+- "dropped" means samples the band pushed but that are invalid — **not missed heartbeats**. Since
+  0.1.2 the card splits them into `sqi0` (the band itself flagged the sample as unreliable) and
+  `range` (interval <250 ms / >3000 ms). In the one real-device run 279 beats were kept and 337
+  samples dropped — more drops than beats usually means poor contact, not a lost heartbeat;
 - cost: minute sync pauses while measuring (same as stress calibration) and resumes afterwards.
 
 On the MCP side this is `band_hr_live`: pass `seconds` (5–180) to start one, omit it to read the
 current/last measurement. When nothing is running it answers `running:false`
 (`hr_live_not_running`) instead of inventing numbers.
+
+## Health page (new in 0.1.2)
+
+The main screen now has a "健康" (health) card at the top; tapping it opens the visual page — the same
+look as the Nexus health page (plain system Views + Canvas, no libraries; dark background, rounded
+cards):
+
+- **hero banner**: date, one line about today ("slept 8 h 56 min · 6,204 steps · stress normal ·
+  mood pleasant"), connection state, battery, time of the newest data, a "同步" (sync) button;
+- **six tiles**: heart rate (big number + today's sparkline + resting HR), SpO2 (+ today's minimum),
+  steps (+ goal progress), sleep (duration + stage bar + score), stress (score + level chip),
+  emotion (orb + one of three states) — each one shows when its value was recorded;
+- **four sections**: ① today's 24 h heart-rate line (current point + max / min / avg / resting /
+  number of samples) ② last night's sleep stage bar (deep / light / REM / awake in time order, with
+  durations and sleep HR / SpO2) ③ stress timeline (four level bands + a dot per measurement +
+  distribution) and the emotion strip (pleasant / calm / unpleasant) ④ today's steps (total + bars
+  per hour);
+- **with no data every block says "还没同步过 —— 点上面『立即同步』"** — no fake numbers; the page
+  redraws after a sync;
+- it only reads the local stores (`hw_samples.json` / `hw_trusleep.json` / `hw_stress.json` /
+  `hw_dict_*.json`); no extra requests to the band, the protocol side is untouched.
+
+⚠️ **Not verified**: layout, charts and the post-sync redraw have **not been seen on a real device
+yet** (it compiles, `aapt` shows the right version and the page's strings are in the dex). There is no
+screenshot because there is no real-device result yet — we will add one when we have it.
 
 ## How it differs from other "Huawei health MCP" projects
 
@@ -118,7 +151,11 @@ Both approaches have trade-offs; pick whichever you need.
 The AI and the phone must be on the same LAN (or joined through something like Tailscale). Clients
 that cannot set headers can use `…/mcp?token=<token>` instead.
 
-5. Want your own copy of the data? Tap "导出数据" (Export data): it writes one JSON with all local
+6. Want today's numbers in one place? Tap the "健康" (health) card at the top of the main screen —
+   hero, six tiles, heart-rate line, sleep stages, stress/emotion timelines and steps per hour live
+   there. The back button returns to the main screen.
+
+7. Want your own copy of the data? Tap "导出数据" (Export data): it writes one JSON with all local
    stores packed as-is plus one CSV per store (flattened by date + fields, opens straight in Excel)
    to `Download/HuaweiBandBridge/` on the phone. Local only — nothing is uploaded.
 
@@ -137,17 +174,23 @@ that cannot set headers can use `…/mcp?token=<token>` instead.
 No record means null / empty — **values are never invented**.
 
 `band_hr_live` answer fields (fixed, do not rename): `ok` / `running` / `bpm` / `bpm_avg` / `beats` /
-`window_ms` / `lag_ms` / `last_beat_ms_ago` / `started_at` (epoch ms) / `device` / `unverified`;
+`dropped` / `dropped_sqi0` / `dropped_range` / `window_ms` / `lag_ms` / `last_beat_ms_ago` /
+`started_at` (epoch ms) / `device` / `unverified`;
 failures are `{ok:false, running:false, error:"band_not_connected" | "hr_live_not_running" | "bad_request"}`.
+`dropped` counts samples the band pushed but that are invalid (= `dropped_sqi0` + `dropped_range`),
+not missed heartbeats.
 
 ## Architecture
 
 Two Gradle modules: `bandcore/` is a reusable Huawei-band protocol library, `app/` is the app.
 
 ```
-app/                        one-screen UI + foreground service + the MCP server on the phone
+app/                        one-screen UI + health page + foreground service + the MCP server on the phone
   BandService                 foreground service holding BandSession and the MCP server
   MainActivity                plain-View screen: connect / sync / calibration / MCP config / profile / log
+  HealthActivity              health page: hero / six tiles / four sections (plain Views + Canvas, no libraries)
+  HealthData                  snapshot for the health page; reads local stores only, works offline
+  Charts                      hand-drawn charts: heart-rate line / sleep stages / stress timeline / emotion strip / hour bars / orb
   McpServer                   on-phone MCP (Streamable HTTP, POST /mcp, Bearer token)
   BandTools                   the 7 tools: read local stores, answers carry record time and granularity
   WeatherFetch                weather from Open-Meteo (coarse location only)
@@ -214,7 +257,7 @@ needs no band, no Android SDK and no network:
 .\selftest.ps1     # Windows
 ```
 
-It only uses JDK 17+ (the project uses JDK 21) with `javac` + `java` and currently runs **235 checks**
+It only uses JDK 17+ (the project uses JDK 21) with `javac` + `java` and currently runs **251 checks**
 (TLV encode/decode + edge cases, CRC16 against an independent implementation, frame header/length/
 partial packets/slice reassembly, `PacketAssembler` feeding, `HuaweiUtil` time conversion, and
 `RriBeats` interval→bpm plus window trimming). What is covered and what is *not* (BLE link, auth,
