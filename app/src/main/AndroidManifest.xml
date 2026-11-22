@@ -27,6 +27,11 @@
             </intent-filter>
         </activity>
 
+        <!-- 健康页：横幅 / 六块概览 / 图表，纯系统 View + Canvas -->
+        <activity android:name=".HealthActivity" android:exported="false"
+            android:label="健康"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
         <service android:name=".BandService" android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 

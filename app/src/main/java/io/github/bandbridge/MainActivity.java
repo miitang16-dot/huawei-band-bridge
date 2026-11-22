@@ -72,6 +72,25 @@ public class MainActivity extends Activity {
         tag.setPadding(0, dp(4), 0, dp(12));
         col.addView(tag);
 
+        /* 健康页（和 Nexus 健康页同一套视觉）：横幅 / 六块概览 / 图表 */
+        LinearLayout health = new LinearLayout(this);
+        health.setOrientation(LinearLayout.VERTICAL);
+        health.setPadding(dp(16), dp(14), dp(16), dp(16));
+        Charts.PanelBg healthBg = new Charts.PanelBg(card, Color.argb(28, 120, 80, 95), 1, 20, getResources().getDisplayMetrics().density);
+        healthBg.setHeroTints(Charts.Palette.HR, Charts.Palette.SLEEP);
+        health.setBackground(healthBg);
+        LinearLayout healthTop = new LinearLayout(this);
+        healthTop.setOrientation(LinearLayout.HORIZONTAL);
+        healthTop.addView(text("健康", 18, ink, true));
+        healthTop.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+        healthTop.addView(text("›", 22, sub, false));
+        health.addView(healthTop);
+        health.addView(text("心率 · 血氧 · 步数 · 睡眠 · 压力 · 情绪 —— 今天的数据，和 Nexus 健康页同一套", 12, sub, false));
+        health.setOnClickListener(v -> startActivity(new Intent(this, HealthActivity.class)));
+        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(-1, -2);
+        hlp.topMargin = dp(2);
+        col.addView(health, hlp);
+
         /* 连接 */
         LinearLayout c1 = card(col, "手环");
         state = text("", 15, ink, true); c1.addView(state);
@@ -94,6 +113,7 @@ public class MainActivity extends Activity {
             if (s != null && s.session != null) s.session.hrLiveStop();
         });
         ch.addView(note("lag = 包到达时间 − 最后一拍的时间。这个数字小，才是真的「此刻」；大就说明在补几秒前的数据。"));
+        ch.addView(note("「丢」是手环标为无效的样本：sqi=0（它自己说这一拍不可信），或间期 <250 ms / >3000 ms（漏拍、断拍、手没贴住）。不是漏掉的心跳。"));
 
         /* 压力 */
         LinearLayout c2 = card(col, "压力校准");
@@ -327,7 +347,10 @@ public class MainActivity extends Activity {
         sb.append("心率 ").append(sn.bpm > 0 ? sn.bpm + " bpm" : "—")
           .append("（整段平均 ").append(sn.bpmAvg > 0 ? sn.bpmAvg + " bpm" : "—").append("）").append('\n');
         sb.append("已收 ").append(sn.beats).append(" 拍");
-        if (sn.dropped > 0) sb.append(" · 丢掉 ").append(sn.dropped).append(" 拍");
+        if (sn.dropped > 0) {
+            sb.append(" · 丢 ").append(sn.dropped).append("（sqi0 ").append(sn.droppedSqi0)
+              .append(" / 范围 ").append(sn.droppedRange).append("）");
+        }
         sb.append('\n');
         if (sn.lastBeatAtMs > 0) {
             sb.append("最近一拍：").append(sn.lastBeatAgoMs(now)).append(" ms 前").append('\n');
