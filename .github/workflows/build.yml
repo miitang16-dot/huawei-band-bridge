@@ -1,0 +1,66 @@
+# 构建 + 协议自测（GitHub Actions）
+#
+# 两个 job：
+#   test  —— 只用 JDK 跑 bandcore 的纯协议自测（不需要 Android SDK、不需要手环），见 docs/TESTING.md
+#   build —— JDK 21 + Android SDK 编 debug APK，并把 APK 作为 artifact 上传
+#
+# 不引用任何 secrets；所有依赖都是 GitHub 官方 action 和公开的 Android SDK 包。
+# 注意：截至提交时这个 workflow 还没有在 GitHub 上真实跑过（本机无法验证 Actions），
+# 第一次真实运行可能还需要小修（比如 sdkmanager 的包名）。
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: bandcore self-test (JDK 21, no Android SDK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Run offline protocol self-test
+        run: bash ./selftest.sh
+
+  build:
+    name: assembleDebug
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install platform and build-tools
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
