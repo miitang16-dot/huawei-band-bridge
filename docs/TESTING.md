@@ -89,6 +89,8 @@ PASS  168/168 checks
 - **报文级语义**（各 `Response.parseTlv()` 的字段含义）——只验证了分派到哪个类，没有逐字段验证；
   字段含义是靠真机数据反推的（见 `docs/ROADMAP.md`）。
 - **App / MCP / 天气 / 音乐**——UI、HTTP 服务、Open-Meteo、通知使用权都不在自测范围。
+- **数据导出**（`app/DataExport`）——CSV 摊平 / 写 `Download` 目录只做了**编译验证**，还没在真机上点过
+  （写 MediaStore、用 Excel 打开 CSV）——**未验证**。
 - 自测**不代表协议正确**：它是回归网（防止重构把已知行为改坏），不是正确性证明。
 
 ## 替身（stubs）说明

@@ -77,6 +77,7 @@ Gadgetbridge 的源码是这条路的起点（AGPL-3.0，见 `NOTICE.md`），�
       APK 作为 artifact 上传 —— **未在 GitHub 上实跑验证**（本机无法验证 Actions，第一次跑可能还要小修）
 - [x] **数据导出**：App 里「导出数据」→ `Download/HuaweiBandBridge/` 下一个原样打包的 JSON +
       每个存档一个 CSV（按日期摊平；Android 10+ 用 MediaStore，8/9 写 App 外部目录，都不需要存储权限）
+      —— 代码编译通过，**还没上真机验证写盘 / CSV 打开**（未验证）
 - [x] `LICENSE`（AGPL-3.0）、`NOTICE.md`（Gadgetbridge 来源与改动）、`README.md`、
       `RELEASE-0.1.md`、本文件
 
