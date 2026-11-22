@@ -1,7 +1,7 @@
 # 测试 · Testing
 
 > 这份文档说明：**哪些代码不需要手环就能验证、怎么跑、测不到什么**。
-> 状态：`selftest` 在本机（Windows / PowerShell 5.1 + JDK 21）跑过，**168 项全过**；
+> 状态：`selftest` 在本机（Windows / PowerShell 5.1 + JDK 21）跑过，**235 项全过**；
 > GitHub Actions 上的实跑见文末「CI」一节，**未在 GitHub 上实跑验证**。
 
 ## 为什么是「零依赖自测」而不是 JUnit
@@ -41,7 +41,7 @@ export JAVA_HOME=/path/to/jdk-21
   ok   parsed equals original
   ...
 ------------------------------------------------------------
-PASS  168/168 checks
+PASS  235/235 checks
 ------------------------------------------------------------
 ```
 
@@ -63,8 +63,9 @@ PASS  168/168 checks
 | `HuaweiPacket`（帧层） | 手搓帧（不是只拿 `serialize()` 的产物反喂自己）：magic `0x5A` + 长度 + 分片标记 + serviceId/commandId + TLV + CRC 的解析；magic 错、CRC 错、载荷翻一位、长度为负被拒；半包累积（1 字节 → 2 字节 → 剩余）；`getLeft()` 报告后续包长度；raw payload 服务（`0x0A/0x05` 等）不建 TLV；按 service/command 分派到 `DeviceConfig.BatteryLevel.Response` 等子类（未知服务落到普通 `HuaweiPacket`）；`serialize()` 的未分片帧与解析往返；**分片**：按 `sliceSize` 切帧、每帧 ≤ sliceSize、CRC 有效、slice 标记 1/2/3、flag 递增、逐帧喂回重组后 TLV 一致 |
 | `PacketAssembler` | 整帧一次喂、逐字节喂、一次喂多帧、分片逐条喂 / 一次全喂 / 5 字节一段喂；没人认领的包走 `onAsync`；断线 `reset()` 丢掉半包、不把上一条链路的尾巴接过来；null / 空 feed 被忽略 |
 | `HuaweiUtil` | `timeToByte`（`HH:mm` → `{时, 分}`，含非法输入返回 null）；`getTimeAndZoneId` 的 6+N 字节布局：秒级时间戳、时区小时字节、分钟字节、时区 ID（UTC / Asia/Shanghai / Asia/Kathmandu +5:45） |
+| `RriBeats`（心跳直播的换算） | `60000 / rri` 的取整（250/534/800/969/1000/3000 ms → 240/112/75/62/60/20 bpm，0 和负数当「没有数据」）；逐拍时间累加（第一拍以包到达时刻为锚点，之后 += rri）；三个口径（窗口平滑 / 整段平均 / 只看最后一拍）；滑动窗口收缩（2 秒窗口留最近 3 拍、再来一拍挤掉最老的）与 `windowSpanMs` 只算窗口、不算整段；脏拍过滤（`sqi=0`、<250 ms 的漏拍双倍、>3000 ms 的断拍、0/负数）；空状态不返回「0 bpm 当数据」；`reset()` |
 
-合计 **168 项检查**。
+合计 **235 项检查**。
 
 ### 两处「钉住现有行为」的地方（不是 bug 修复）
 

@@ -4,16 +4,19 @@
 *让 AI 直接读你的华为手环 —— 不用华为运动健康、不用华为账号、数据不上任何云。*（[中文](README.md)）
 
 > 🧪 **0.1 beta.** The protocol core works on a real HUAWEI Band 10; the app and the MCP server are
-> freshly written and still being tested on the device.
+> freshly written and still being tested on the device. 0.1.1 adds "heartbeat live": measure for
+> 60 seconds and see **one value per beat** (see below).
 
 ## Download / versions
 
 | Version | File | Notes |
 |---|---|---|
+| `0.1.1` (2026-11-23) | [`dist/huawei-band-bridge-0.1.1-debug.apk`](dist/huawei-band-bridge-0.1.1-debug.apk) | adds the beat-by-beat "heartbeat live" view + the `band_hr_live` MCP tool, debug signature |
 | `0.1.0` (2026-11-22) | [`dist/huawei-band-bridge-0.1-debug.apk`](dist/huawei-band-bridge-0.1-debug.apk) | first test build, debug signature |
 
-- Install steps, the verified / not-yet-verified list, checksums (MD5 / SHA-256) and how it was built
-  are in [`RELEASE-0.1.md`](RELEASE-0.1.md). Roadmap and known limits: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- Install steps, the verified / not-yet-verified list, checksums (MD5 / SHA-256) and how it was built:
+  [`RELEASE-0.1.1.md`](RELEASE-0.1.1.md) for 0.1.1, [`RELEASE-0.1.md`](RELEASE-0.1.md) for 0.1.0.
+  Roadmap and known limits: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 - Debug signature: you cannot install it over a build with a different signature — uninstall first.
 - Build it yourself (JDK 21 + Android SDK 36):
 
@@ -34,12 +37,37 @@ band control the phone's music player.
 
 | Data | Granularity | Notes |
 |---|---|---|
-| Heart rate / SpO2 / steps / resting HR | one point per minute | the app syncs once a minute (the band has no realtime HR push; this is the ceiling) |
+| Heart rate / SpO2 / steps / resting HR | one point per minute | the band **records** one point per minute and the app syncs once a minute; that is the default granularity |
+| **Heartbeat live (beat-by-beat)** | **one value per beat (≈1 s)** | tap and measure for 60 s (3-minute option): uses the band's RRI stream (`0x19`), HR = `60000 / rri`. **Latency not measured on a real device yet** — see below |
 | TruSleep | per-minute stage | deep / light / REM / awake + sleep score; matches the band's screen minute by minute |
 | Stress | measured by the band | calibrate once in the app (sit still for 1 minute), then the band measures on its own, score 1–99 |
 | Emotion | measured by the band | valence / arousal / 3 states (the band's own emotion page still needs Huawei Health, see below) |
 | Weather → band | hourly | Open-Meteo, coarse location only |
 | Band music page → phone player | realtime | play / pause / previous / next / volume |
+
+### Heartbeat live (new in 0.1.1)
+
+Besides the one-point-per-minute records, the band exposes a **beat-by-beat** stream (RRI, service
+`0x19`): start a measurement and the band pushes the interval of every heartbeat,
+`HR = 60000 / interval`. Until now that stream was only used for the 60 s stress calibration; the app
+now shows it directly:
+
+- tap "心跳直播 → 开始" (default 60 s; there is also a 3-minute option) — the band's optical sensor
+  runs for that long;
+- the card shows: current bpm, session average, how many beats arrived, **how many ms ago the last
+  beat was**, the **lag estimate**, first-packet latency, and start/end times;
+- **lag = packet arrival − the newest beat reconstructed from RRI**. Small (a few hundred ms to a few
+  seconds) means it really is "right now"; large means the band batches pushes and you are closer to
+  a replay of the last minute;
+- real data (one measurement on the same Band 10): **85 beats in 60 s**; **lag has not been measured
+  on a real device yet** (this release is the first one that pulls the RRI stream out of the stress
+  calibration code); **3 minutes has not been verified**, which is why that button is labelled
+  "unverified";
+- cost: minute sync pauses while measuring (same as stress calibration) and resumes afterwards.
+
+On the MCP side this is `band_hr_live`: pass `seconds` (5–180) to start one, omit it to read the
+current/last measurement. When nothing is running it answers `running:false`
+(`hr_live_not_running`) instead of inventing numbers.
 
 ## How it differs from other "Huawei health MCP" projects
 
@@ -54,7 +82,7 @@ This project takes the other road: **the phone talks to the band directly.**
 | Huawei Health app required | ❌ (the band must be unpaired from it) | ✅ |
 | Huawei ID required | ❌ | ✅ |
 | Data goes through a cloud | ❌ phone only | ✅ Huawei cloud |
-| Heart-rate granularity | 1 minute | mostly daily aggregates |
+| Heart-rate granularity | 1 minute, plus an on-demand beat-by-beat measurement | mostly daily aggregates |
 | Can write to the band (weather / music) | ✅ | ❌ |
 | History from before the switch | ❌ | ✅ |
 | The band's own emotion page | ❌ shows "app version too old" | ✅ |
@@ -69,7 +97,10 @@ Both approaches have trade-offs; pick whichever you need.
    connection the band may ask you to confirm.
 3. (Optional) Tap "开始校准" (Calibrate) and sit still for one minute — afterwards the band measures
    stress on its own.
-4. The "MCP 服务" card shows the address (`http://<phone-ip>:8848/mcp`) and the token; tap "复制配置"
+4. Want to see the heartbeat right now? Tap "心跳直播 → 开始（1 分钟）". Wear the band snugly and sit
+   quietly; the card shows bpm, beats received, how long ago the last beat was, and the lag estimate.
+   **A small lag means it really is "now"**; a large one means it is catching up on older beats.
+5. The "MCP 服务" card shows the address (`http://<phone-ip>:8848/mcp`) and the token; tap "复制配置"
    (Copy config) and paste it into your AI client:
 
 ```json
@@ -101,8 +132,13 @@ that cannot set headers can use `…/mcp?token=<token>` instead.
 | `band_sleep` | The night that ended on a given morning: fall asleep / wake time, sleep score, deep / light / REM / awake minutes, sleep HR and SpO2, stage timeline |
 | `band_stress` | Stress scores the band measured on a day (1–99 + level) |
 | `band_emotion` | Emotion records the band measured on a day (valence / arousal / 3 states) |
+| `band_hr_live` | Heartbeat live: beat-by-beat heart rate. Pass `seconds` (5–180) to measure now; omit to read the current/last measurement. When nothing runs it says so instead of inventing numbers |
 
 No record means null / empty — **values are never invented**.
+
+`band_hr_live` answer fields (fixed, do not rename): `ok` / `running` / `bpm` / `bpm_avg` / `beats` /
+`window_ms` / `lag_ms` / `last_beat_ms_ago` / `started_at` (epoch ms) / `device` / `unverified`;
+failures are `{ok:false, running:false, error:"band_not_connected" | "hr_live_not_running" | "bad_request"}`.
 
 ## Architecture
 
@@ -113,7 +149,7 @@ app/                        one-screen UI + foreground service + the MCP server 
   BandService                 foreground service holding BandSession and the MCP server
   MainActivity                plain-View screen: connect / sync / calibration / MCP config / profile / log
   McpServer                   on-phone MCP (Streamable HTTP, POST /mcp, Bearer token)
-  BandTools                   the 6 tools: read local stores, answers carry record time and granularity
+  BandTools                   the 7 tools: read local stores, answers carry record time and granularity
   WeatherFetch                weather from Open-Meteo (coarse location only)
   DataExport                  export local stores → Download/HuaweiBandBridge (JSON + CSV)
   Media · MediaListener       read the current playback (notification access) for the band music page
@@ -131,6 +167,9 @@ bandcore/                   the Huawei-band protocol core (no UI, no network, no
                               report connected, language / date / account, enable the band's auto measurements
   data/StepSync …             syncers: minute data, TruSleep (0x2C file download + sequence parser),
                               stress (60 s RRI calibration + files), emotion (P2P dictionary sync), weather, music
+  data/HrLiveSession          heartbeat live: 0x19 beat-by-beat RRI stream → heart rate
+                              (self-contained; another app / plugin can embed it directly)
+  proto/hr/RriBeats           pure RRI → bpm logic (current / session average / window / noise filter, covered by the self-test)
   data/*Store                 local stores (JSON files in the app's private dir)
 ```
 
@@ -175,11 +214,11 @@ needs no band, no Android SDK and no network:
 .\selftest.ps1     # Windows
 ```
 
-It only uses JDK 17+ (the project uses JDK 21) with `javac` + `java` and currently runs **168 checks**
+It only uses JDK 17+ (the project uses JDK 21) with `javac` + `java` and currently runs **235 checks**
 (TLV encode/decode + edge cases, CRC16 against an independent implementation, frame header/length/
-partial packets/slice reassembly, `PacketAssembler` feeding, `HuaweiUtil` time conversion). What is
-covered and what is *not* (BLE link, auth, crypto KATs) is in **[docs/TESTING.md](docs/TESTING.md)** —
-read it before touching protocol code.
+partial packets/slice reassembly, `PacketAssembler` feeding, `HuaweiUtil` time conversion, and
+`RriBeats` interval→bpm plus window trimming). What is covered and what is *not* (BLE link, auth,
+crypto KATs) is in **[docs/TESTING.md](docs/TESTING.md)** — read it before touching protocol code.
 
 `.github/workflows/build.yml` runs the self-test and `:app:assembleDebug` on push / PR and uploads the
 APK as an artifact; **this workflow has not been run on GitHub yet** (Actions cannot be verified from
@@ -200,7 +239,13 @@ s.samples().query(fromSec, toSec);   // heart rate / SpO2 / steps
 s.truSleep().query(fromMs, toMs);    // TruSleep
 s.stress().query(fromMs, toMs);      // stress
 s.emotion().query(fromMs, toMs);     // emotion
+
+// Heartbeat live (beat-by-beat 0x19 stream): the callback gives bpm / bpmAvg / beats / lagMs / lastBeatMsAgo
+s.hrLiveStart(60, (bpm, bpmAvg, beats, lagMs, lastBeatMsAgo) -> { });
+HrLiveSession.Snapshot live = s.hrLiveSnapshot();   // the last measurement is kept after it ends
 ```
+
+Only need the "RRI → heart rate" maths (no band)? Use `proto/hr/RriBeats`; it has no Android dependency.
 
 ## ⚠️ Before you start
 
@@ -216,7 +261,10 @@ s.emotion().query(fromMs, toMs);     // emotion
 
 - Band 10 uses the "new sync": file downloads go through service `0x2C`, not `0x0A`.
 - TruSleep stage codes: `1` light / `2` REM / `3` deep / `4` awake.
-- There is no realtime heart rate `0x07/0x1c` — Band 10 does not support it.
+- `0x07/0x1c` ("realtime heart rate" in Gadgetbridge) is **not in Band 10's command table**, and it is
+  only a mode switch for automatic HR measurement — it pushes no data. The beat-by-beat channel is
+  `0x19` (RRI stream, see "Heartbeat live"); **its push latency has not been measured on a real
+  device yet**, so do not present it as verified "realtime".
 - The band asks for phone info (`0x01/0x10`) only once, right after connecting, and never again.
 - Weather: when the band sends `0x0f/0x04` with `7f=186AA`, answer with weather only — do not also
   answer "received", or it will ask again every 3 seconds.
