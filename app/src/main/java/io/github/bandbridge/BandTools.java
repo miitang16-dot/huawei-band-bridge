@@ -1,6 +1,7 @@
 package io.github.bandbridge;
 
 import io.github.bandbridge.core.BandSession;
+import io.github.bandbridge.core.data.HrLiveSession;
 import io.github.bandbridge.core.proto.HuaweiStressParser;
 
 import org.json.JSONArray;
@@ -14,7 +15,8 @@ import java.util.Locale;
  * Rules (kept from the app this came from):
  *  - gaps stay gaps: a minute without a reading is "no data", never 0 and never filled in;
  *  - every answer says when it was recorded and at what resolution;
- *  - "now" means "latest record" (the band keeps ~1 sample/min and has no realtime HR channel).
+ *  - "now" means "latest record" (the band stores ~1 sample/min). A live beat-by-beat measurement
+ *    is a separate thing: {@code band_hr_live} (service 0x19 RRI stream) — never mix the two up.
  */
 final class BandTools {
 
@@ -43,11 +45,21 @@ final class BandTools {
         a.put(tool("band_emotion", "Emotion records the band measured on a day: valence (0-100, higher = more pleasant), arousal (0-100) and the band's state code "
                 + "(1/2/3 ≈ unpleasant / calm / pleasant, inferred from the data, not documented by Huawei).",
                 props().put("date", str("YYYY-MM-DD, default today"))));
+        a.put(tool("band_hr_live", "Beat-by-beat heart rate from the band's RRI stream (service 0x19): one value per beat, inside a limited measurement window. "
+                + "Omit `seconds` to read the latest/ongoing measurement; pass `seconds` (5-180) to START one — it takes that long and the band's optical sensor runs during it. "
+                + "Answer fields: ok, running, bpm, bpm_avg, beats, window_ms, lag_ms, last_beat_ms_ago, started_at (epoch ms), device, unverified. "
+                + "Failure: {ok:false, running:false, error:'band_not_connected'|'hr_live_not_running'|'bad_request'}. "
+                + "When nothing is being measured it says so (hr_live_not_running) — do NOT invent or fill in numbers. "
+                + "bpm/bpm_avg/beats = 0 and lag_ms/last_beat_ms_ago = -1 mean 'no beat yet'. "
+                + "lag_ms = packet arrival minus the newest beat (small = really 'now', large = catching up on older beats); "
+                + "window_ms = how long this measurement has been running.",
+                props().put("seconds", num("Optional 5-180: start a measurement of this many seconds. Omit to only read the latest one."))));
         return a;
     }
 
     private static JSONObject props() throws Exception { return new JSONObject(); }
     private static JSONObject str(String d) throws Exception { return new JSONObject().put("type", "string").put("description", d); }
+    private static JSONObject num(String d) throws Exception { return new JSONObject().put("type", "integer").put("description", d); }
     private static JSONObject tool(String name, String desc, JSONObject props) throws Exception {
         return new JSONObject().put("name", name).put("description", desc)
                 .put("inputSchema", new JSONObject().put("type", "object").put("properties", props).put("additionalProperties", false));
@@ -64,6 +76,7 @@ final class BandTools {
             case "band_sleep": return sleep(args.optString("date", ""));
             case "band_stress": return stress(args.optString("date", ""));
             case "band_emotion": return emotion(args.optString("date", ""));
+            case "band_hr_live": return hrLive(args.optInt("seconds", 0));
             default: throw new IllegalArgumentException("unknown tool " + name);
         }
     }
@@ -138,7 +151,8 @@ final class BandTools {
             o.put("lastNight", sl.optBoolean("found") ? new JSONObject().put("asleep", sl.opt("asleep")).put("woke", sl.opt("woke"))
                     .put("totalMin", sl.opt("totalMin")).put("score", sl.opt("score")) : JSONObject.NULL);
         }
-        o.put("note", "Values are the newest records, not live readings (the band stores ~1 sample/min; SpO2 is measured only a few times per hour). null = no record.");
+        o.put("note", "Values are the newest records, not live readings (the band stores ~1 sample/min; SpO2 is measured only a few times per hour). null = no record. "
+                + "For a beat-by-beat measurement use band_hr_live.");
         return o;
     }
 
@@ -247,5 +261,43 @@ final class BandTools {
         }
         return new JSONObject().put("date", ymd(d0)).put("records", out)
                 .put("note", "state is inferred from the band's code (not documented by Huawei); valence/arousal are the raw 0-100 values.");
+    }
+
+    /**
+     * 心跳直播（0x19 逐拍流）。
+     *
+     * <p><b>返回字段是契约，别改名</b>（Nexus 3.309 按这套字段解析）：
+     * {@code ok / running / bpm / bpm_avg / beats / window_ms / lag_ms / last_beat_ms_ago /
+     * started_at / device / unverified}；失败只有 {@code ok:false, running:false, error}。</p>
+     *
+     * <p>{@code seconds > 0} = 开始一次测量（5..180），立刻返回；不传 = 只读当前/最近一次。
+     * 没在播就老实说 {@code hr_live_not_running}，不编数字。</p>
+     */
+    private JSONObject hrLive(int seconds) throws Exception {
+        if (!s.isReady()) return hrLiveError("band_not_connected");
+        if (seconds < 0 || (seconds > 0 && (seconds < HrLiveSession.MIN_SECONDS || seconds > HrLiveSession.MAX_SECONDS))) {
+            return hrLiveError("bad_request");
+        }
+        if (seconds > 0 && !s.hrLiveRunning()) s.hrLiveStart(seconds);
+        HrLiveSession.Snapshot sn = s.hrLiveSnapshot();
+        if (!s.hrLiveRunning() || sn == null || !sn.running) return hrLiveError("hr_live_not_running");
+        long now = System.currentTimeMillis();
+        String model = s.model();
+        return new JSONObject()
+                .put("ok", true)
+                .put("running", true)
+                .put("bpm", sn.bpm)
+                .put("bpm_avg", sn.bpmAvg)
+                .put("beats", sn.beats)
+                .put("window_ms", sn.elapsedMs(now))
+                .put("lag_ms", sn.lagMs)
+                .put("last_beat_ms_ago", sn.lastBeatAgoMs(now))
+                .put("started_at", sn.startedAtMs)
+                .put("device", model == null || model.isEmpty() ? "huawei band" : model)
+                .put("unverified", true);
+    }
+
+    private static JSONObject hrLiveError(String code) throws Exception {
+        return new JSONObject().put("ok", false).put("running", false).put("error", code);
     }
 }

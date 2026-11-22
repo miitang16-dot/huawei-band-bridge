@@ -184,7 +184,9 @@ final class McpServer {
                             .put("serverInfo", new JSONObject().put("name", "huawei-band-bridge").put("version", BuildInfo.VERSION))
                             .put("instructions", "Health data from the user's Huawei band, read directly over Bluetooth by their phone. "
                                     + "Use band_now for current values, band_day for a day or time window, band_sleep for a night, "
-                                    + "band_stress / band_emotion for stress and mood. Never invent values: null or empty means no record.");
+                                    + "band_stress / band_emotion for stress and mood, and band_hr_live for a beat-by-beat "
+                                    + "heart-rate measurement (service 0x19 RRI stream; pass seconds to start one, omit to read). "
+                                    + "Never invent values: null or empty means no record, and hr_live_not_running means nothing is being measured.");
                     return ok(id, res);
                 }
                 case "ping": return ok(id, new JSONObject());

@@ -26,22 +26,26 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import io.github.bandbridge.core.BandSession;
+import io.github.bandbridge.core.data.HrLiveSession;
 
 import org.json.JSONObject;
 
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
-/** One screen: connection, stress calibration, MCP address + token, music access, profile, log. Plain views, no libraries. */
+/** One screen: connection, heartbeat live view, stress calibration, MCP address + token, music access, profile, log. Plain views, no libraries. */
 public class MainActivity extends Activity {
 
     private final Handler h = new Handler(Looper.getMainLooper());
-    private TextView state, data, mcpInfo, calibTxt, musicTxt, log, exportTxt;
-    private Button connectBtn, mcpBtn, calibBtn;
+    private TextView state, data, mcpInfo, calibTxt, musicTxt, log, exportTxt, hrTxt;
+    private Button connectBtn, mcpBtn, calibBtn, hr1Btn, hr3Btn, hrStopBtn;
     private boolean showToken = false;
     private int ink, sub, card, accent;
 
@@ -75,6 +79,21 @@ public class MainActivity extends Activity {
         connectBtn = button(c1, "连接", v -> toggleConnect());
         button(c1, "立即同步", v -> { BandService s = BandService.instance; if (s != null && s.session != null) s.session.syncNow(); });
         c1.addView(note("第一次用之前：手环要先和「华为运动健康」解绑（App 里删除设备，或手环恢复出厂），两边不能同时连。"));
+
+        /* 心跳直播 */
+        LinearLayout ch = card(col, "心跳直播（逐拍心率）");
+        ch.addView(note("手环里还有一路「逐拍」数据（RRI）：能算出一拍一拍的心率，比每分钟一格细得多。"
+                + "按一下测 1 分钟，戴紧、别说话；能不能连着开更久还没上真机验证。"));
+        hrTxt = text("", 13, ink, false);
+        hrTxt.setTextIsSelectable(true);
+        ch.addView(hrTxt);
+        hr1Btn = button(ch, "开始（1 分钟）", v -> startHrLive(HrLiveSession.DEFAULT_SECONDS));
+        hr3Btn = button(ch, "试 3 分钟（未验证手环肯开这么久）", v -> startHrLive(180));
+        hrStopBtn = button(ch, "停", v -> {
+            BandService s = BandService.instance;
+            if (s != null && s.session != null) s.session.hrLiveStop();
+        });
+        ch.addView(note("lag = 包到达时间 − 最后一拍的时间。这个数字小，才是真的「此刻」；大就说明在补几秒前的数据。"));
 
         /* 压力 */
         LinearLayout c2 = card(col, "压力校准");
@@ -170,6 +189,16 @@ public class MainActivity extends Activity {
         refresh();
     }
 
+    /** 开始一次心跳直播（0x19 逐拍流）。立刻返回，进度靠 refresh() 读快照。 */
+    private void startHrLive(int seconds) {
+        BandService s = BandService.instance;
+        if (s == null || s.session == null) { toast("手环还没连上"); return; }
+        if (!s.session.isReady()) { toast("还在连，等状态变成「已连接」再点"); return; }
+        if (!s.session.hrLiveStart(seconds)) { toast("已经在测了"); return; }
+        toast("开始了：安静坐着，让它测完这 " + seconds + " 秒");
+        refresh();
+    }
+
     /** 导出本机存档（JSON + CSV）。读文件 + 写下载目录都在工作线程，UI 只更新结果文字。 */
     private void exportData() {
         exportTxt.setText("导出中…");
@@ -240,7 +269,8 @@ public class MainActivity extends Activity {
             d = last > 0 ? "手环数据到 " + new java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.ROOT).format(new java.util.Date(last)) : "还没有数据（连上后一分钟内会拉第一次）";
             calibTxt.setText(BandService.calib.isEmpty() ? (bs.calibration() != null ? "已校准过 ✓" : "还没校准") : BandService.calib);
             calibBtn.setEnabled(bs.isReady() && !bs.calibrating());
-        } else { calibTxt.setText("先连上手环"); calibBtn.setEnabled(false); }
+            renderHrLive(bs);
+        } else { calibTxt.setText("先连上手环"); calibBtn.setEnabled(false); renderHrLive(null); }
         data.setText(d);
 
         boolean mcpOn = on && s.mcp != null && s.mcp.isRunning();
@@ -272,6 +302,68 @@ public class MainActivity extends Activity {
             }
         } catch (Throwable ignored) { }
         return out;
+    }
+
+    /* ── 心跳直播 ── */
+
+    /** 把一次测量的快照画到卡片上：BPM / 最近一拍多久之前 / lag / 拍数 / 起止。 */
+    private void renderHrLive(BandSession bs) {
+        HrLiveSession.Snapshot sn = bs == null ? null : bs.hrLiveSnapshot();
+        boolean ready = bs != null && bs.isReady();
+        boolean running = bs != null && bs.hrLiveRunning();
+        hr1Btn.setEnabled(ready && !running);
+        hr3Btn.setEnabled(ready && !running);
+        hrStopBtn.setEnabled(running);
+        if (bs == null) { hrTxt.setText("先连上手环"); return; }
+        if (sn == null) {
+            hrTxt.setText(ready ? "还没测过。点「开始」—— 60 秒后能看到这一分钟里每一拍的心率。" : "先连上手环");
+            return;
+        }
+        long now = System.currentTimeMillis();
+        StringBuilder sb = new StringBuilder();
+        sb.append(sn.running ? "● 正在测 · " + sn.plannedSeconds + " 秒"
+                              : "○ " + endText(sn.endReason) + " · 用时 " + oneDp(sn.elapsedMs(now) / 1000.0) + " 秒")
+          .append('\n');
+        sb.append("心率 ").append(sn.bpm > 0 ? sn.bpm + " bpm" : "—")
+          .append("（整段平均 ").append(sn.bpmAvg > 0 ? sn.bpmAvg + " bpm" : "—").append("）").append('\n');
+        sb.append("已收 ").append(sn.beats).append(" 拍");
+        if (sn.dropped > 0) sb.append(" · 丢掉 ").append(sn.dropped).append(" 拍");
+        sb.append('\n');
+        if (sn.lastBeatAtMs > 0) {
+            sb.append("最近一拍：").append(sn.lastBeatAgoMs(now)).append(" ms 前").append('\n');
+            sb.append("lag 估计：").append(sn.lagMs < 0 ? "—" : sn.lagMs + " ms").append('\n');
+        } else if (sn.running) {
+            sb.append("还在等第一拍…").append('\n');
+        } else {
+            sb.append("这次没收到拍（手环没戴紧 / 不肯开 0x19）。").append('\n');
+        }
+        if (sn.firstPacketAfterMs >= 0) sb.append("首包：开流后 ").append(sn.firstPacketAfterMs).append(" ms").append('\n');
+        if (sn.startedAtMs > 0) {
+            sb.append("开始 ").append(hhmmss(sn.startedAtMs));
+            if (sn.endedAtMs > 0) sb.append(" → ").append(hhmmss(sn.endedAtMs));
+            sb.append('\n');
+        }
+        if (sn.error != null) sb.append("出错：").append(sn.error);
+        hrTxt.setText(sb.toString().trim());
+    }
+
+    private static String endText(String reason) {
+        if (reason == null) return "结束";
+        switch (reason) {
+            case "timeup": return "到点结束";
+            case "stopped": return "手动停的";
+            case "no-data": return "没收到数据";
+            case "interrupted": return "连接断了";
+            case "error": return "出错";
+            default: return reason;
+        }
+    }
+
+    private static String oneDp(double v) { return String.format(Locale.ROOT, "%.1f", v); }
+
+    private static String hhmmss(long ms) {
+        // 这个跟界面上的语言无关，固定用 24 小时制
+        return new SimpleDateFormat("HH:mm:ss", Locale.ROOT).format(new Date(ms));
     }
 
     /* ── tiny view helpers ── */

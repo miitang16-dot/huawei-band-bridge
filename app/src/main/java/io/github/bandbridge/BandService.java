@@ -15,6 +15,7 @@ import android.os.IBinder;
 import io.github.bandbridge.core.BandSession;
 import io.github.bandbridge.core.Probe;
 import io.github.bandbridge.core.data.DeviceInit;
+import io.github.bandbridge.core.data.HrLiveSession;
 
 import org.json.JSONObject;
 
@@ -115,6 +116,7 @@ public class BandService extends Service {
                         : "没测成（心跳信号太少）。手环戴紧一点、坐着别动，再试一次。";
                 ping();
             }
+            @Override public void onHrLive(HrLiveSession.Snapshot snapshot) { ping(); }
         });
         session.start();
         if (mcpWanted(this)) startMcp();
