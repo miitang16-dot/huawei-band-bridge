@@ -159,6 +159,25 @@ final class Ui {
         return new Screen(root, bar, sv, body);
     }
 
+    /**
+     * Force the whole screen to lay out and redraw after a data update. On her HarmonyOS phone
+     * (edge-to-edge, transparent bars) changed text did not reach the screen until she scrolled,
+     * so a plain setText() is not trusted to repaint by itself.
+     */
+    void repaint(Screen s) {
+        if (s == null) return;
+        s.root.requestLayout();
+        invalidateTree(s.root);
+    }
+
+    private static void invalidateTree(View v) {
+        v.invalidate();
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) invalidateTree(g.getChildAt(i));
+        }
+    }
+
     /** Title in the top bar, with an optional back button in front of it. */
     TextView barTitle(Screen s, String title, boolean back) {
         if (back) {

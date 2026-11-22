@@ -48,6 +48,7 @@ public class HealthActivity extends Activity {
     private final Handler h = new Handler(Looper.getMainLooper());
     private int ink, sub, card, bg, stroke, accent, track;
     private Ui ui;
+    private Ui.Screen screen;
     private float density;
 
     private final BandService.Ui myUi = () -> h.post(this::refresh);
@@ -88,7 +89,7 @@ public class HealthActivity extends Activity {
         track = ui.t.track;
 
         // edge to edge: the top bar sits below the status bar, the list ends above the nav bar
-        Ui.Screen screen = ui.screen();
+        screen = ui.screen();
         ui.barTitle(screen, "健康", true);
         LinearLayout col = screen.body;
 
@@ -121,7 +122,7 @@ public class HealthActivity extends Activity {
         h.removeCallbacks(tick);
     }
 
-    private final Runnable tick = this::refresh;
+    private final Runnable tick = new Runnable() { @Override public void run() { refresh(); h.postDelayed(this, 5000); } };
 
     /** Load on a worker thread (the stores are JSON files), then repaint on the UI thread. */
     private void refresh() {
@@ -140,7 +141,7 @@ public class HealthActivity extends Activity {
             final HealthData data = d;
             runOnUiThread(() -> {
                 loading = false;
-                if (data != null) apply(data);
+                if (data != null) { apply(data); ui.repaint(screen); }
             });
         }, "band-health").start();
     }

@@ -46,6 +46,7 @@ public class MainActivity extends Activity {
 
     private final Handler h = new Handler(Looper.getMainLooper());
     private Ui ui;
+    private Ui.Screen screen;
 
     /* connection */
     private TextView connPill, connTitle, connMeta, connHint, connBtn, syncBtn;
@@ -85,6 +86,7 @@ public class MainActivity extends Activity {
     private void build() {
         ui = new Ui(this);
         Ui.Screen s = ui.screen();
+        screen = s;
         ui.barTitle(s, "手环桥", false);
         LinearLayout col = s.body;
 
@@ -111,7 +113,13 @@ public class MainActivity extends Activity {
         h.postDelayed(tick, 5000);
     }
     @Override protected void onPause() { super.onPause(); BandService.ui = null; h.removeCallbacks(tick); }
-    private final Runnable tick = new Runnable() { @Override public void run() { refresh(); h.postDelayed(this, 5000); } };
+    /** Every second while heartbeat live runs (countdown, last beat), every 5 s otherwise. */
+    private final Runnable tick = new Runnable() { @Override public void run() {
+        refresh();
+        BandService s = BandService.instance;
+        boolean live = s != null && s.session != null && s.session.hrLiveRunning();
+        h.postDelayed(this, live ? 1000 : 5000);
+    } };
 
     /* ── build ─────────────────────────────────────────────────────────────── */
 
@@ -450,6 +458,8 @@ public class MainActivity extends Activity {
         if (!s.session.isReady()) { toast("还在连接，等显示「已连接」再试"); return; }
         if (!s.session.hrLiveStart(seconds)) { toast("已经在测了"); return; }
         toast("开始了，坐着别动，测 " + seconds + " 秒");
+        h.removeCallbacks(tick);
+        h.post(tick);
         refresh();
     }
 
@@ -510,7 +520,7 @@ public class MainActivity extends Activity {
 
     private void refresh() {
         if (!built) return;
-        try { refreshViews(); }
+        try { refreshViews(); ui.repaint(screen); }
         catch (Throwable t) {
             built = false;
             h.removeCallbacks(tick);
