@@ -10,6 +10,7 @@ import io.github.bandbridge.core.data.DeviceInit;
 import io.github.bandbridge.core.data.DictStore;
 import io.github.bandbridge.core.data.DictSync;
 import io.github.bandbridge.core.data.FeatureUpload;
+import io.github.bandbridge.core.data.HrLiveSession;
 import io.github.bandbridge.core.data.SampleStore;
 import io.github.bandbridge.core.data.StepSync;
 import io.github.bandbridge.core.data.StressSync;
@@ -69,6 +70,12 @@ public final class BandSession {
         default void onData(int newSamples) { }
         /** Stress calibration progress: state "measuring" (left, beats) / "done" (score) / "fail". */
         default void onCalibration(String state, int a, int b) { }
+
+        /**
+         * 心跳直播（0x19 逐拍流）：测量期间每个包刷新一次，结束后 running=false
+         * （endReason 说明是到点 / 被停 / 没数据 / 出错）。
+         */
+        default void onHrLive(HrLiveSession.Snapshot snapshot) { }
     }
 
     public static final int PHASE_IDLE = 0, PHASE_SCAN = 1, PHASE_AUTH = 2, PHASE_READY = 3;
@@ -101,6 +108,12 @@ public final class BandSession {
     private volatile int featTries, round;
     private volatile long lastTruAt, lastStressAt, lastDictAt, wxSentAt, lastDataAt;
     private volatile String lastMusicSig = "";
+
+    /* 心跳直播（0x19 逐拍流）：请求 → 同步循环里跑一轮 → 结果留在 hrLiveSnap（结束后也留着） */
+    private volatile int wantHrLiveSec;
+    private volatile HrLiveSession hrLiveSess;
+    private volatile HrLiveSession.Callback hrLiveCallback;
+    private volatile HrLiveSession.Snapshot hrLiveSnap;
 
     public BandSession(Context context, Hooks hooks) {
         this.app = context.getApplicationContext();
@@ -164,6 +177,51 @@ public final class BandSession {
         kick.offer(Boolean.TRUE);
         return true;
     }
+
+    /* ── 心跳直播：逐拍 RRI 流（service 0x19） ─────────────────────────────── */
+
+    /**
+     * 开始一次「心跳直播」：开手环的逐拍测量，把心跳一拍一拍换算成心率。
+     * <b>立刻返回</b>；进度和结果通过 {@link Hooks#onHrLive(HrLiveSession.Snapshot)}。
+     *
+     * <p>跟压力校准一样，测量期间占用同步循环（那几十秒不拉分钟数据），结束后恢复。
+     * 一次是有限窗口：默认 60 秒，最长 3 分钟（<b>能不能开到 3 分钟未验证</b>）。
+     * 手环 0x19 的推送节奏也没真机量过，所以 {@code snapshot().lagMs} 就是判断
+     * 「这是此刻还是几秒前」的依据。</p>
+     *
+     * @param seconds 5..180，越界会被夹住
+     * @return false = 还没连上手环 / 已经在测
+     */
+    public boolean hrLiveStart(int seconds) { return hrLiveStart(seconds, null); }
+
+    /**
+     * 同上，但把进度回调给你（{@link HrLiveSession.Callback} 给的是
+     * bpm / bpmAvg / beats / lagMs / lastBeatMsAgo 五个数），方便别的壳薄薄一层转出去。
+     */
+    public boolean hrLiveStart(int seconds, HrLiveSession.Callback callback) {
+        if (phase != PHASE_READY) return false;
+        if (hrLiveSess != null || wantHrLiveSec > 0) return false;
+        int secs = Math.max(HrLiveSession.MIN_SECONDS, Math.min(HrLiveSession.MAX_SECONDS, seconds));
+        hrLiveCallback = callback;
+        hrLiveSnap = HrLiveSession.Snapshot.starting(System.currentTimeMillis(), secs);
+        wantHrLiveSec = secs;
+        kick.offer(Boolean.TRUE);
+        return true;
+    }
+
+    /** 中途停掉心跳直播（不等它退；下一个轮询点就会收尾）。 */
+    public void hrLiveStop() {
+        HrLiveSession s = hrLiveSess;
+        if (s != null) { s.stop(); return; }
+        wantHrLiveSec = 0;                                      // 还没轮到它开：撤掉这次请求
+        if (hrLiveSnap != null && hrLiveSnap.running) hrLiveSnap = null;   // 别留一个假的「正在测」
+    }
+
+    /** 在测（或已请求、还没开始）吗。 */
+    public boolean hrLiveRunning() { return hrLiveSess != null || wantHrLiveSec > 0; }
+
+    /** 当前 / 最近一次心跳直播的快照；从来没测过 = null（结束后也保留最后一次）。 */
+    public HrLiveSession.Snapshot hrLiveSnapshot() { return hrLiveSnap; }
 
     /** Forget the paired identity (next start pairs as a new device). */
     public void forget() {
@@ -352,6 +410,15 @@ public final class BandSession {
         profileDirty = true; autoStressSent = false; featDone = false; featTries = 0; wxSentAt = 0; lastMusicSig = "";
         final Set<Integer> dictSkip = Collections.synchronizedSet(new HashSet<>());
         while (myGen == gen && phase == PHASE_READY) {
+            /* ⓪ 心跳直播（0x19 逐拍流）：她 / MCP 要了一次就这里跑。
+               测量期间占用 worker 和 runner（跟压力校准一样，那一轮不拉分钟数据），跑完恢复。 */
+            if (wantHrLiveSec > 0 && hrLiveSess == null) {
+                final int secs = wantHrLiveSec;
+                wantHrLiveSec = 0;
+                runHrLive(rr, secs);
+                if (myGen != gen) return;
+            }
+
             long now = System.currentTimeMillis() / 1000L;
 
             if (profileDirty) {
@@ -444,7 +511,53 @@ public final class BandSession {
 
             try { hooks.onData(added); } catch (Throwable ignored) { }
             round++;
-            kick.poll(1, TimeUnit.MINUTES);                         // the band records ~1 sample/min; no realtime HR channel
+            kick.poll(1, TimeUnit.MINUTES);                         // 手环约每分钟记一格（心跳直播是另开的 0x19 窗口，不算在内）
         }
+    }
+
+    /* ── 心跳直播（worker 线程内；把 0x19 逐拍流当心率用） ─────────────────── */
+
+    /**
+     * 跑一次心跳直播。这里的顺序很重要：
+     * 先 {@code start()}（HrLiveSession 自己起线程），再 {@code awaitFinished()} —— 
+     * 测量期间这个 worker 只等着，不碰 {@link RequestRunner}，所以 runner 的所有权是清楚的。
+     */
+    private void runHrLive(RequestRunner rr, int seconds) {
+        final HrLiveSession.Callback user = hrLiveCallback;
+        hrLiveCallback = null;
+        final HrLiveSession sess = new HrLiveSession(rr);
+        hrLiveSess = sess;
+        HrLiveSession.Callback relay = new HrLiveSession.Callback() {
+            @Override public void onUpdate(int bpm, int bpmAvg, int beats, long lagMs, long lastBeatMsAgo) {
+                HrLiveSession.Snapshot snap = sess.snapshot();
+                if (snap != null) emitHrLive(snap);
+                if (user != null) {
+                    try { user.onUpdate(bpm, bpmAvg, beats, lagMs, lastBeatMsAgo); } catch (Throwable ignored) { }
+                }
+            }
+
+            @Override public void onEnd(HrLiveSession.Snapshot snap) {
+                emitHrLive(snap);
+                if (user != null) { try { user.onEnd(snap); } catch (Throwable ignored) { } }
+            }
+        };
+        try {
+            sess.start(seconds, relay);
+            long wait = seconds * 1000L + HrLiveSession.HOST_WAIT_MARGIN_MS;
+            if (!sess.awaitFinished(wait)) {
+                Probe.post("hwlive", "stuck | " + seconds + "s 还没结束，主动停");
+                sess.stop();
+                sess.awaitFinished(5000L);
+            }
+        } catch (Throwable t) {
+            Probe.post("hwlive", "fail | " + t.getClass().getSimpleName() + ":" + t.getMessage());
+        } finally {
+            hrLiveSess = null;
+        }
+    }
+
+    private void emitHrLive(HrLiveSession.Snapshot snap) {
+        hrLiveSnap = snap;
+        try { hooks.onHrLive(snap); } catch (Throwable ignored) { }
     }
 }
