@@ -112,7 +112,7 @@ public class MainActivity extends Activity {
             BandService s = BandService.instance;
             if (s != null && s.session != null) s.session.hrLiveStop();
         });
-        ch.addView(note("lag = 包到达时间 − 最后一拍的时间。这个数字小，才是真的「此刻」；大就说明在补几秒前的数据。"));
+        ch.addView(note("lag = 包到达时间 − 最后一拍的时间。≈0 ms 与「逐拍实时推送」相符；但单凭 lag 不能排除手环在 ≤1 个包内做缓冲 / 成对推送。lag 大就说明在补几秒前的数据。"));
         ch.addView(note("「丢」是手环标为无效的样本：sqi=0（它自己说这一拍不可信），或间期 <250 ms / >3000 ms（漏拍、断拍、手没贴住）。不是漏掉的心跳。"));
 
         /* 压力 */
@@ -346,12 +346,21 @@ public class MainActivity extends Activity {
           .append('\n');
         sb.append("心率 ").append(sn.bpm > 0 ? sn.bpm + " bpm" : "—")
           .append("（整段平均 ").append(sn.bpmAvg > 0 ? sn.bpmAvg + " bpm" : "—").append("）").append('\n');
-        sb.append("已收 ").append(sn.beats).append(" 拍");
+        sb.append("有效 ").append(sn.beats).append(" 拍");
         if (sn.dropped > 0) {
-            sb.append(" · 丢 ").append(sn.dropped).append("（sqi0 ").append(sn.droppedSqi0)
+            sb.append(" · 丢 ").append(sn.dropped).append(" 样本（sqi0 ").append(sn.droppedSqi0)
               .append(" / 范围 ").append(sn.droppedRange).append("）");
         }
         sb.append('\n');
+        int samples = sn.beats + sn.dropped;
+        if (samples > 0) {
+            sb.append("样本合计 ").append(samples);
+            if (sn.packets > 0) {
+                sb.append(" · 收到 ").append(sn.packets).append(" 个包（每包约 ")
+                  .append(String.format(Locale.ROOT, "%.1f", samples / (float) sn.packets)).append(" 个样本）");
+            }
+            sb.append('\n');
+        }
         if (sn.lastBeatAtMs > 0) {
             sb.append("最近一拍：").append(sn.lastBeatAgoMs(now)).append(" ms 前").append('\n');
             sb.append("lag 估计：").append(sn.lagMs < 0 ? "—" : sn.lagMs + " ms").append('\n');

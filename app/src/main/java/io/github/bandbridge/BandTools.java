@@ -292,6 +292,8 @@ final class BandTools {
                 .put("dropped", sn.dropped)
                 .put("dropped_sqi0", sn.droppedSqi0)
                 .put("dropped_range", sn.droppedRange)
+                .put("samples", sn.beats + sn.dropped)
+                .put("packets", sn.packets)
                 .put("window_ms", sn.elapsedMs(now))
                 .put("lag_ms", sn.lagMs)
                 .put("last_beat_ms_ago", sn.lastBeatAgoMs(now))
