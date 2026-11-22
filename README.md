@@ -13,7 +13,8 @@
 | `0.1.1`（2026-11-23） | [`dist/huawei-band-bridge-0.1.1-debug.apk`](dist/huawei-band-bridge-0.1.1-debug.apk) | 加了「心跳直播」+ MCP 工具 `band_hr_live`，debug 签名 |
 | `0.1.0`（2026-11-22） | [`dist/huawei-band-bridge-0.1-debug.apk`](dist/huawei-band-bridge-0.1-debug.apk) | 第一个测试包，debug 签名 |
 
-- 直接点上面那个链接下载（GitHub 页面上是 `dist/` 里的文件，用「Download raw file」也能下）。
+- **最省事的下载方式**：[Releases](https://github.com/miitang16-dot/huawei-band-bridge/releases) 页直接点 APK（附件形式，手机上点一下就下；`dist/` 里那份是同一个文件，只是 GitHub 的 raw 域名在国内常常连不上）。
+- 也可以点上面表格里的链接（GitHub 页面上是 `dist/` 里的文件，用「Download raw file」也能下）。
 - 安装步骤、已验证 / 未验证清单、校验值（MD5 / SHA-256）、构建方式：0.1.1 看
   [`RELEASE-0.1.1.md`](RELEASE-0.1.1.md)，0.1.0 看 [`RELEASE-0.1.md`](RELEASE-0.1.md)。
   路线图和已知限制见 [`docs/ROADMAP.md`](docs/ROADMAP.md)。
