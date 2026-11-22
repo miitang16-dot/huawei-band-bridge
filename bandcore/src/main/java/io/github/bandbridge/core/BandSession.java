@@ -159,7 +159,11 @@ public final class BandSession {
     }
 
     /** Pull now (otherwise it pulls once a minute). */
-    public void syncNow() { lastTruAt = 0; kick.offer(Boolean.TRUE); }
+    public void syncNow() {
+        // TruSleep is a file download (a few seconds); tapping sync again within 2 min reuses the last one
+        if (System.currentTimeMillis() - lastTruAt > 120_000L) lastTruAt = 0;
+        kick.offer(Boolean.TRUE);
+    }
 
     /** New weather is available from {@link Hooks#weather()} → push it now. */
     public void weatherChanged() { wxSentAt = 0; kick.offer(Boolean.TRUE); }
