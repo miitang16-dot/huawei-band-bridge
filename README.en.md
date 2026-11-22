@@ -3,14 +3,14 @@
 **Let your AI read your Huawei band directly. No Huawei Health app, no Huawei ID, no cloud.**
 ([中文](README.md))
 
-> 🧪 **Test release** (currently 0.1.4). The protocol core runs on one HUAWEI Band 10. The app and the MCP
+> 🧪 **Test release** (currently 0.1.9). The protocol core runs on one HUAWEI Band 10. The app and the MCP
 > server are still being checked feature by feature on a real device. Every item below carries an evidence
 > level, and nothing that has not run on a device is called "verified".
 
 <img src="docs/screenshots/main-heart-rate.jpg" width="320" alt="Huawei Band Bridge 0.1.1 main screen: connection state and a beat-by-beat heart-rate reading">
 
 *Screenshot of 0.1.1 on a HUAWEI Band 10 + HarmonyOS phone; that heartbeat-live run measured a lag of 0 ms.
-0.1.4 has a new interface; new screenshots will follow once it has been checked on the device.*
+Since 0.1.4 the app has a new interface; new screenshots will follow.*
 
 ## What it is
 
