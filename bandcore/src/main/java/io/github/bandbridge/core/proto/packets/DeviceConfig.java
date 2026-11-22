@@ -1248,7 +1248,7 @@ public class DeviceConfig {
                             "isoSalt=" + StringUtils.bytesToHex(isoSalt) +
                             ", peerAuthId=" + StringUtils.bytesToHex(peerAuthId) +
                             ", peerUserType=" + peerUserType +
-                            ", token=" + StringUtils.bytesToHex(token) +
+                            ", token=" + (token == null ? "null" : token.length + "B") +
                             '}';
                 }
             }
@@ -1263,7 +1263,7 @@ public class DeviceConfig {
                 @Override
                 public String toString() {
                     return "Step2Data{" +
-                            "returnCodeMac=" + StringUtils.bytesToHex(returnCodeMac) +
+                            "returnCodeMac=" + (returnCodeMac == null ? "null" : returnCodeMac.length + "B") +
                             '}';
                 }
             }
@@ -1281,7 +1281,7 @@ public class DeviceConfig {
                 public String toString() {
                     return "Step3Data{" +
                             "nonce=" + StringUtils.bytesToHex(nonce) +
-                            ", encAuthToken=" + StringUtils.bytesToHex(encAuthToken) +
+                            ", encAuthToken=" + (encAuthToken == null ? "null" : encAuthToken.length + "B") +
                             '}';
                 }
             }
@@ -1333,7 +1333,7 @@ public class DeviceConfig {
                 @Override
                 public String toString() {
                     return "PakeConfirmData{" +
-                            "kcfData=" + StringUtils.bytesToHex(kcfData) +
+                            "kcfData=" + (kcfData == null ? "null" : kcfData.length + "B") +
                             '}';
                 }
             }
@@ -1348,7 +1348,7 @@ public class DeviceConfig {
                 @Override
                 public String toString() {
                     return "PakeExchangeData{" +
-                            "exAuthInfo=" + StringUtils.bytesToHex(exAuthInfo) +
+                            "exAuthInfo=" + (exAuthInfo == null ? "null" : exAuthInfo.length + "B") +
                             '}';
                 }
             }
@@ -1393,7 +1393,8 @@ public class DeviceConfig {
 
                 @Override
                 public String toString() {
-                    return "StsAckResponseData{kcfData=" + StringUtils.bytesToHex(kcfData) + '}';
+                    return "StsAckResponseData{kcfData="
+                            + (kcfData == null ? "null" : kcfData.length + "B") + '}';
                 }
             }
 
@@ -1606,7 +1607,7 @@ public class DeviceConfig {
                 public String toString() {
                     return "Step2Data{" +
                             "peerAuthId=" + StringUtils.bytesToHex(peerAuthId) +
-                            ", token=" + StringUtils.bytesToHex(token) +
+                            ", token=" + (token == null ? "null" : token.length + "B") +
                             ", isDeviceLevel=" + isDeviceLevel +
                             '}';
                 }
@@ -1625,7 +1626,7 @@ public class DeviceConfig {
                 public String toString() {
                     return "Step3Data{" +
                             "nonce=" + StringUtils.bytesToHex(nonce) +
-                            ", encData=" + StringUtils.bytesToHex(encData) +
+                            ", encData=" + (encData == null ? "null" : encData.length + "B") +
                             '}';
                 }
             }
@@ -1643,7 +1644,7 @@ public class DeviceConfig {
                 public String toString() {
                     return "Step4Data{" +
                             "nonce=" + StringUtils.bytesToHex(nonce) +
-                            ", encResult=" + StringUtils.bytesToHex(encResult) +
+                            ", encResult=" + (encResult == null ? "null" : encResult.length + "B") +
                             '}';
                 }
             }

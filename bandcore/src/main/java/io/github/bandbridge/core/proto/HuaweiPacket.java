@@ -921,13 +921,14 @@ public class HuaweiPacket {
 
     @Override
     public String toString() {
+        // 不打印包体/分片内容：日志可能被贴到 issue 里（这些是密钥协商期和健康数据期的载荷）
         return "HuaweiPacket{" +
                 "paramsProvider=" + paramsProvider +
                 ", serviceId=" + serviceId +
                 ", commandId=" + commandId +
-                ", tlv=" + tlv +
-                ", partialPacket=" + Arrays.toString(partialPacket) +
-                ", payload=" + Arrays.toString(payload) +
+                ", tlv=" + (tlv == null ? "null" : "present") +
+                ", partialPacket=" + (partialPacket == null ? "null" : partialPacket.length + "B") +
+                ", payload=" + (payload == null ? "null" : payload.length + "B") +
                 ", complete=" + complete +
                 ", isEncrypted=" + isEncrypted +
                 ", isSliced=" + isSliced +

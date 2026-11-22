@@ -146,7 +146,7 @@ public final class AuthState {
             if (prefs != null) {
                 prefs.edit().putString(KEY_AUTHKEY, storedKey).apply();
             }
-            Log.d(TAG, "created authkey: " + storedKey);
+            Log.d(TAG, "created authkey (" + storedKey.length() + " hex chars, value not logged)");
         }
         authKeyHex = storedKey;
         paramsProvider.setSecretKey(StringUtils.hexToBytes(authKeyHex));
@@ -164,7 +164,7 @@ public final class AuthState {
             if (prefs != null) {
                 prefs.edit().putString(KEY_DEVICE_MAC, storedMac).apply();
             }
-            Log.d(TAG, "created fake mac: " + storedMac);
+            Log.d(TAG, "created fake mac (value not logged)");
         }
         macAddress = storedMac;
 
@@ -175,7 +175,7 @@ public final class AuthState {
             if (prefs != null) {
                 prefs.edit().putString(KEY_ANDROID_ID, storedId).apply();
             }
-            Log.d(TAG, "created androidID: " + storedId);
+            Log.d(TAG, "created androidID (" + storedId.length() + " hex chars, value not logged)");
         }
         androidID = storedId;
 
@@ -425,8 +425,8 @@ public final class AuthState {
         return "AuthState{device=" + deviceAddress
                 + ", firstConnection=" + firstConnection
                 + ", authKey=" + (authKeyHex == null ? "null" : authKeyHex.length() + "hex")
-                + ", mac=" + macAddress
-                + ", androidId=" + androidID
+                + ", mac=" + (macAddress == null ? "null" : "set")
+                + ", androidId=" + (androidID == null ? "null" : "set")
                 + ", deviceSupportType=" + deviceSupportType
                 + ", authVersion=" + authVersion
                 + ", authMode=" + authMode

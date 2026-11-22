@@ -152,7 +152,11 @@ public final class DictSync {
 
     /** 不是这一类的回包返回 null */
     private List<JSONObject> parse(byte[] data, int want) throws Exception {
-        if (data == null || data.length < 2 || data[0] != 1) { probe("data odd | " + hex(data)); return new ArrayList<>(); }
+        // 探针不打包体：这是解出来的健康数据（情绪/HRV），只记长度
+        if (data == null || data.length < 2 || data[0] != 1) {
+            probe("data odd | " + (data == null ? "null" : data.length + "B") + " (payload not logged)");
+            return new ArrayList<>();
+        }
         HuaweiTLV tlv = new HuaweiTLV();
         tlv.parse(data, 1, data.length - 1);
         int op = tlv.getAsInteger(0x01);

@@ -272,7 +272,7 @@ public final class AuthFlow {
             currentStep = "done";
             drainLeftoverInbox();
             Log.i(TAG, "=== Huawei auth OK via " + authPath
-                    + ", sessionKey=" + hex(state.getSessionSecretKey()));
+                    + ", sessionKey=" + (state.getSessionSecretKey() == null ? "null" : state.getSessionSecretKey().length + "B (not logged)"));
             return true;
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
@@ -627,7 +627,8 @@ public final class AuthFlow {
             throw new AuthException("无法创建 secretKey：AuthState 里没有 authkey 且无法生成（缺 Context？）");
         }
         state.getParamsProvider().setSecretKey(key);
-        Log.d(TAG, "createSecretKey -> " + hex(key));
+        // 密钥不进日志：这是本机与手环的长期 authkey，公开仓库/分享日志都不能带出来
+        Log.d(TAG, "createSecretKey: ok | " + key.length + " bytes (value not logged)");
     }
 
     // ---------------- 5. Pincode ----------------
@@ -702,7 +703,8 @@ public final class AuthFlow {
         byte[] challenge = Arrays.copyOfRange(digested, 0x00, 0x20);
         byte[] firstKey = Arrays.copyOfRange(digested, 0x20, 0x30);
         state.setFirstKey(firstKey);
-        Log.d(TAG, "Auth challenge=" + hex(challenge) + " firstKey=" + hex(firstKey));
+        // challenge / firstKey 都由 authkey 派生 —— 只记长度，不记值
+        Log.d(TAG, "Auth digest ready | challenge=" + challenge.length + "B firstKey=" + firstKey.length + "B (values not logged)");
 
         send(new DeviceConfig.Auth.Request(pp, challenge, nonce));
 
@@ -719,8 +721,9 @@ public final class AuthFlow {
         byte[] expectedAnswer = Arrays.copyOfRange(digestedResp, 0, 0x20);
         byte[] actualAnswer = resp.challengeResponse;
         if (actualAnswer == null || !Arrays.equals(expectedAnswer, actualAnswer)) {
-            throw new AuthException("Auth challenge 应答不匹配: 手环给 "
-                    + hex(actualAnswer) + "，本地算 " + hex(expectedAnswer));
+            throw new AuthException("Auth challenge 应答不匹配：手环给 "
+                    + (actualAnswer == null ? "null" : actualAnswer.length + "B")
+                    + "，本地算 " + expectedAnswer.length + "B（值不打印）");
         }
         Log.i(TAG, "Auth challenge VERIFIED");
     }
@@ -795,7 +798,8 @@ public final class AuthFlow {
 
         byte[] key = huaweiCrypto.encryptBondingKey(
                 pp.getEncryptMethod(), secretKey, encryptionKey, iv);
-        Log.d(TAG, "Bond: iv=" + hex(iv) + " key=" + hex(key));
+        // Bond 的 iv/key 是密钥材料（iv 虽然公开、但同一行带上 key 就一起泄了）—— 只记长度
+        Log.d(TAG, "Bond: iv=" + iv.length + "B key=" + key.length + "B (values not logged)");
 
         send(new DeviceConfig.Bond.Request(pp, state.getSerial(), key, iv));
 
@@ -862,7 +866,8 @@ public final class AuthFlow {
             if (step == 0x03) {
                 byte[] salt = concat(randSelf, randPeer);
                 sessionKey = CryptoUtils.hkdfSha256(psk, salt, HKDF_INFO_SESSION_KEY, 32);
-                Log.d(TAG, "HiChain sessionKey=" + hex(sessionKey));
+                // 会话密钥不进日志
+                Log.d(TAG, "HiChain sessionKey ready | " + sessionKey.length + "B (value not logged)");
                 if (operationCode == 0x02) {
                     step = 0x04;
                 }
@@ -939,8 +944,10 @@ public final class AuthFlow {
                 byte[] message = concat(randPeer, randSelf, authIdSelf, authIdPeer);
                 byte[] tokenCheck = CryptoUtils.calcHmacSha256(psk, message);
                 if (!Arrays.equals(peerToken, tokenCheck)) {
-                    throw new AuthException("HiChain step1 token 校验失败: 手环给 "
-                            + hex(peerToken) + "，本地算 " + hex(tokenCheck));
+                    throw new AuthException("HiChain step1 token 校验失败：手环给 "
+                            + (peerToken == null ? "null" : peerToken.length + "B")
+                            + "，本地算 " + (tokenCheck == null ? "null" : tokenCheck.length + "B")
+                            + "（值不打印）");
                 }
                 Log.d(TAG, "HiChain step1 token OK");
                 step = 0x02;
@@ -952,8 +959,10 @@ public final class AuthFlow {
                 byte[] returnCodeMac = resp.step2Data.returnCodeMac;
                 byte[] returnCodeMacCheck = CryptoUtils.calcHmacSha256(psk, ZERO_FOUR);
                 if (!Arrays.equals(returnCodeMacCheck, returnCodeMac)) {
-                    throw new AuthException("HiChain step2 returnCodeMac 校验失败: 手环给 "
-                            + hex(returnCodeMac) + "，本地算 " + hex(returnCodeMacCheck));
+                    throw new AuthException("HiChain step2 returnCodeMac 校验失败：手环给 "
+                            + (returnCodeMac == null ? "null" : returnCodeMac.length + "B")
+                            + "，本地算 " + (returnCodeMacCheck == null ? "null" : returnCodeMacCheck.length + "B")
+                            + "（值不打印）");
                 }
                 Log.d(TAG, "HiChain step2 returnCodeMac OK");
                 step = 0x03;
@@ -968,7 +977,9 @@ public final class AuthFlow {
                             resp.step3Data.nonce, challenge);
                     // GB: supportProvider.setSecretKey(authToken) —— 持久化 + 灌 ParamsProvider
                     state.setSecretKey(authToken);
-                    Log.d(TAG, "HiChain bind: authToken 已存为长期 authkey = " + hex(authToken));
+                    // authToken 会成为长期 authkey：不进日志
+                    Log.d(TAG, "HiChain bind: authToken saved as long-term authkey | "
+                            + authToken.length + "B (value not logged)");
                 }
                 step = 0x04;
 
@@ -982,7 +993,7 @@ public final class AuthFlow {
                 byte[] finalKey = CryptoUtils.hkdfSha256(sessionKey, salt, HKDF_INFO_RETURN_KEY, 32);
                 // GB 只写 paramsProvider，不写持久化 —— 下次连接还要用长期 authkey 重新握手。
                 state.setSessionSecretKey(finalKey);
-                Log.i(TAG, "HiChain 重连完成，最终 sessionKey=" + hex(finalKey));
+                Log.i(TAG, "HiChain 重连完成，最终 sessionKey | " + finalKey.length + "B (value not logged)");
                 return;
 
             } else {
@@ -1346,8 +1357,9 @@ public final class AuthFlow {
 
         @Override
         public String toString() {
+            // 不打印 secretKey：日志可能被贴到 issue 里
             return "Session{path=" + authPath
-                    + ", secretKey=" + hex(secretKey)
+                    + ", secretKey=" + (secretKey == null ? "null" : secretKey.length + "B")
                     + ", authMode=" + authMode
                     + ", authVersion=" + authVersion
                     + ", authAlgo=" + authAlgo
