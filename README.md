@@ -3,8 +3,7 @@
 **让 AI 直接读你的华为手环 —— 不用华为运动健康、不用华为账号、数据不上任何云。**
 *Let your AI read your Huawei band directly: no Huawei Health app, no Huawei ID, no cloud.*
 
-> 🚧 **开发中。** 现在仓库里是已经在真机（HUAWEI Band 10）上跑通的协议核心库 `bandcore/`；
-> 「手环桥」App 本体和手机上的 MCP 服务正在做。
+> 🧪 **0.1 测试版。** 协议核心在真机（HUAWEI Band 10）上跑通；App 和 MCP 服务刚写好，正在真机测试。
 
 ## 它是什么
 
@@ -43,10 +42,62 @@ GitHub 上已有的华为健康 MCP 基本都是 **从华为云取数据**（官
 
 两条路各有取舍，按自己的需要选。
 
+## 怎么用
+
+1. 手环先和「华为运动健康」**解绑**（见下面的注意事项）。
+2. 装上手环桥 App，点「连接」，允许「附近的设备」「通知」权限。第一次连接时手环上可能要点确认。
+3. （可选）点「开始校准」静坐 1 分钟 —— 之后手环会自己测压力。
+4. 「MCP 服务」那张卡里有地址（`http://手机IP:8848/mcp`）和口令，点「复制配置」，粘到你的 AI 客户端：
+
+```json
+{
+  "mcpServers": {
+    "huawei-band": {
+      "type": "http",
+      "url": "http://192.168.1.23:8848/mcp",
+      "headers": { "Authorization": "Bearer <口令>" }
+    }
+  }
+}
+```
+
+AI 和手机要在同一个局域网（或者用 Tailscale 之类的组网）。不能设置请求头的客户端可以用 `…/mcp?token=<口令>`。
+
+### MCP 工具
+
+| 工具 | 干什么 |
+|---|---|
+| `band_status` | 连没连上、型号、电量、最新数据到几点、压力校准了没 |
+| `band_now` | 最新的心率 / 血氧 / 静息心率 / 今天步数 / 压力 / 情绪 / 昨晚睡眠（每项带记录时间） |
+| `band_day` | 某一天或某个时间段的心率 / 血氧 / 步数统计 + 分段序列（长时段自动放粗，写明粒度） |
+| `band_sleep` | 某天早上醒来那一觉：入睡 / 醒来、睡眠分、深浅 REM 清醒分钟、睡时心率血氧、阶段时间线 |
+| `band_stress` | 某天手环测的压力（1–99 + 档位） |
+| `band_emotion` | 某天手环测的情绪（愉悦度 / 激活度 / 三档状态） |
+
+没有记录就返回 null / 空，**不会补数**。
+
+## 当库用（给自己写 App 的人）
+
+`bandcore/` 是一个独立的 Android 库。核心是 `BandSession`：
+
+```java
+BandSession s = new BandSession(context, new BandSession.Hooks() {
+    @Override public void onData(int newSamples) { /* 新数据进来了 */ }
+    @Override public JSONObject weather() { return myWeather; }          // 可选：给手环的天气
+    @Override public void musicButton(int b) { /* 手环音乐页按键 */ }      // 可选
+});
+s.start();                       // 扫描 → 认证 → 初始化 → 每分钟同步
+s.samples().query(fromSec, toSec);   // 心率 / 血氧 / 步数
+s.truSleep().query(fromMs, toMs);    // 科学睡眠
+s.stress().query(fromMs, toMs);      // 压力
+s.emotion().query(fromMs, toMs);     // 情绪
+```
+
 ## ⚠️ 用之前要知道
 
 - **手环必须先和华为运动健康解绑**（华为 App 里删除设备 / 手环恢复出厂），两边不能同时连。
-- 只支持 **安卓**。手机上这个 App 要能在后台活着，划掉就不同步了（下次打开会补）。
+- 只支持 **安卓**（8.0+）。App 用常驻通知保持后台连接；点通知里的「断开」或 App 里的「断开」才会停。
+- 同一时间只能有**一个** App 连手环：用手环桥时，别的直连手环的 App 要先断开。
 - 协议是逆向来的，华为更新手环固件后可能失效。
 - 这些数据**不是医疗诊断**。
 
