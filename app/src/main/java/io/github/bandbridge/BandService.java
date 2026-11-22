@@ -121,6 +121,9 @@ public class BandService extends Service {
         });
         session.start();
         if (mcpWanted(this)) startMcp();
+        // the user asked for a connection (this also covers a restart by the system or the watchdog)
+        getSharedPreferences(SP, MODE_PRIVATE).edit().putBoolean("auto", true).apply();
+        KeepAlive.scheduleWatchdog(this);
     }
 
     private long wxAge() { return getSharedPreferences(WeatherFetch.SP, MODE_PRIVATE).getLong("at", 0); }
@@ -139,12 +142,25 @@ public class BandService extends Service {
     void restartMcp() { stopMcp(); startMcp(); }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && "stop".equals(intent.getAction())) { stopSelf(); return START_NOT_STICKY; }
+        if (intent != null && "stop".equals(intent.getAction())) {
+            // 断开 from the notification: same as the button in the app, so the watchdog leaves it off
+            getSharedPreferences(SP, MODE_PRIVATE).edit().putBoolean("auto", false).apply();
+            stopSelf();
+            return START_NOT_STICKY;
+        }
         return START_STICKY;
+    }
+
+    /** Swiped away from recents: the foreground service normally survives; if the ROM kills it anyway, check back soon. */
+    @Override public void onTaskRemoved(Intent rootIntent) {
+        if (KeepAlive.wanted(this)) KeepAlive.scheduleWatchdog(this, 60_000L);
+        super.onTaskRemoved(rootIntent);
     }
 
     @Override public void onDestroy() {
         instance = null;
+        if (KeepAlive.wanted(this)) KeepAlive.scheduleWatchdog(this, 30_000L);   // died without 断开: come back
+        else KeepAlive.cancelWatchdog(this);
         try { session.stop(); } catch (Throwable ignored) { }
         try { stopMcp(); } catch (Throwable ignored) { }
         try { media.stop(); } catch (Throwable ignored) { }

@@ -58,6 +58,8 @@ public class MainActivity extends Activity {
     private TextView[] hrStat = new TextView[6];
     /* features */
     private TextView calibSub, calibBtn, musicSub, musicBtn;
+    private TextView batterySub, batteryBtn;
+    private Switch bootSwitch;
     /* MCP */
     private Switch mcpSwitch;
     private TextView mcpPill, mcpAddr, mcpToken, mcpTokenBtn;
@@ -94,6 +96,7 @@ public class MainActivity extends Activity {
         buildHealthLink(col);
         buildHrLive(col);
         buildFeatures(col);
+        buildKeepAlive(col);
         buildMcp(col);
         buildProfile(col);
         buildData(col);
@@ -103,6 +106,8 @@ public class MainActivity extends Activity {
         col.addView(foot);
 
         askPermissions();
+        // opened after the system killed the service: reconnect if the user had left it connected
+        if (hasBt()) KeepAlive.ensureRunning(this, "open");
     }
 
     @Override protected void onResume() {
@@ -230,8 +235,8 @@ public class MainActivity extends Activity {
         ((LinearLayout.LayoutParams) hr1Btn.getLayoutParams()).weight = 1.4f;
 
         hrHelp = ui.small("丢弃样本：手环自己标为无效的（sqi=0），或者间隔小于 250 ms、大于 3000 ms 的。它们不是漏掉的心跳。\n"
-                + "lag：包到达的时间减去最后一拍的时间。约等于 0 说明和逐拍实时推送相符，但不能排除手环在一个包里攒了一两拍再发。\n"
-                + "3 分钟档在 Band 10 上测通过一次，其它型号没试过。");
+                + "lag：包到达的时间减去最后一拍的时间。手环是攒几秒再成批发的（实测约 4 秒一包），所以 lag 几秒是正常的。\n"
+                + "每包样本：一个包里装了几个样本，越大说明攒得越久。3 分钟档在 Band 10 上测通过，其它型号没试过。");
         hrHelp.setLineSpacing(0, 1.4f);
         hrHelp.setPadding(0, ui.dp(10), 0, 0);
         hrHelp.setVisibility(View.GONE);
@@ -283,6 +288,23 @@ public class MainActivity extends Activity {
         line.addView(save, slp);
         wx.addView(line);
         g.addView(wx);
+    }
+
+    private void buildKeepAlive(LinearLayout col) {
+        ui.section(col, "后台运行");
+        LinearLayout g = ui.group(col);
+
+        batteryBtn = ui.chipButton("允许", v -> KeepAlive.askBatteryExempt(this));
+        batterySub = ui.row(g, "不受电池优化限制", "", batteryBtn, null);
+
+        bootSwitch = new Switch(this);
+        bootSwitch.setChecked(KeepAlive.bootWanted(this));
+        bootSwitch.setOnCheckedChangeListener((b, on) -> KeepAlive.setBoot(this, on));
+        ui.row(g, "开机自动连接", "手机重启后自己连上手环（前提是你没有点「断开」）", bootSwitch, null);
+
+        ui.row(g, "华为 / 荣耀手机还要设置一步",
+                "在「设置 › 应用和服务 › 应用启动管理」里找到手环桥，关掉「自动管理」，把「允许自启动」「允许关联启动」「允许后台活动」三个都打开。",
+                ui.chipButton("去设置", v -> KeepAlive.openAppSettings(this)), null);
     }
 
     private void buildMcp(LinearLayout col) {
@@ -434,7 +456,7 @@ public class MainActivity extends Activity {
     /* ── actions ── */
 
     private void toggleConnect() {
-        if (BandService.instance != null) { BandService.stop(this); getSharedPreferences(BandService.SP, MODE_PRIVATE).edit().putBoolean("auto", false).apply(); }
+        if (BandService.instance != null) { getSharedPreferences(BandService.SP, MODE_PRIVATE).edit().putBoolean("auto", false).apply(); BandService.stop(this); }
         else {
             if (!hasBt()) { askPermissions(); toast("要先允许「附近的设备」权限"); return; }
             getSharedPreferences(BandService.SP, MODE_PRIVATE).edit().putBoolean("auto", true).apply();
@@ -548,6 +570,9 @@ public class MainActivity extends Activity {
         boolean music = Media.hasAccess(this);
         musicSub.setText(music ? "手环能切歌，也会显示歌名" : "手环能切歌和暂停。开启通知使用权后还能显示歌名");
         musicBtn.setVisibility(music ? View.GONE : View.VISIBLE);
+        boolean exempt = KeepAlive.batteryExempt(this);
+        batterySub.setText(exempt ? "已允许，系统不会为了省电停掉连接" : "没允许的话，锁屏久了系统可能会停掉连接");
+        batteryBtn.setVisibility(exempt ? View.GONE : View.VISIBLE);
 
         // MCP
         boolean wanted = BandService.mcpWanted(this);

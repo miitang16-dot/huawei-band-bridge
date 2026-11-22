@@ -12,6 +12,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- keep the band connected: reconnect after reboot, ask to be left out of battery optimisation -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:label="手环桥"
@@ -31,6 +34,15 @@
         <!-- 健康页：横幅 / 六块概览 / 图表，纯系统 View + Canvas，跟随系统深浅色 -->
         <activity android:name=".HealthActivity" android:exported="false"
             android:label="健康" />
+
+        <!-- boot / app update / watchdog alarm → restart the connection if the user left it on -->
+        <receiver android:name=".KeepAlive$Receiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <service android:name=".BandService" android:exported="false"
             android:foregroundServiceType="connectedDevice" />
