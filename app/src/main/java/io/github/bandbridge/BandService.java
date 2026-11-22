@@ -77,6 +77,7 @@ public class BandService extends Service {
 
     @Override public void onCreate() {
         super.onCreate();
+        CrashGuard.install(this);
         instance = this;
         Probe.setSink((kind, text) -> {
             synchronized (LOG) {

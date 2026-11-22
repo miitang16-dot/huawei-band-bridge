@@ -65,8 +65,24 @@ public class MainActivity extends Activity {
     private TextView exportSub, logView, logToggle;
     private boolean logOpen = false;
 
+    /** false while the crash screen is showing: refresh() must not touch views that were never built. */
+    private boolean built = false;
+
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        CrashGuard.install(this);
+        String last = CrashGuard.last(this);
+        if (last != null) { CrashGuard.show(this, last, this::recreate); return; }
+        try {
+            build();
+            built = true;
+        } catch (Throwable t) {
+            CrashGuard.save(this, "MainActivity.build", t);
+            CrashGuard.show(this, CrashGuard.last(this), null);
+        }
+    }
+
+    private void build() {
         ui = new Ui(this);
         Ui.Screen s = ui.screen();
         ui.barTitle(s, "手环桥", false);
@@ -87,7 +103,13 @@ public class MainActivity extends Activity {
         askPermissions();
     }
 
-    @Override protected void onResume() { super.onResume(); BandService.ui = () -> h.post(this::refresh); refresh(); h.postDelayed(tick, 5000); }
+    @Override protected void onResume() {
+        super.onResume();
+        if (!built) return;
+        BandService.ui = () -> h.post(this::refresh);
+        refresh();
+        h.postDelayed(tick, 5000);
+    }
     @Override protected void onPause() { super.onPause(); BandService.ui = null; h.removeCallbacks(tick); }
     private final Runnable tick = new Runnable() { @Override public void run() { refresh(); h.postDelayed(this, 5000); } };
 
@@ -483,6 +505,17 @@ public class MainActivity extends Activity {
     /* ── refresh ── */
 
     private void refresh() {
+        if (!built) return;
+        try { refreshViews(); }
+        catch (Throwable t) {
+            built = false;
+            h.removeCallbacks(tick);
+            CrashGuard.save(this, "MainActivity.refresh", t);
+            CrashGuard.show(this, CrashGuard.last(this), null);
+        }
+    }
+
+    private void refreshViews() {
         BandService s = BandService.instance;
         BandSession bs = s == null ? null : s.session;
         renderConnection(s, bs);

@@ -95,13 +95,18 @@ final class Ui {
         w.setStatusBarColor(Color.TRANSPARENT);
         w.setNavigationBarColor(Color.TRANSPARENT);
         if (Build.VERSION.SDK_INT >= 29) { w.setStatusBarContrastEnforced(false); w.setNavigationBarContrastEnforced(false); }
+        // getDecorView() first: on Android 16 getInsetsController() throws (NPE inside PhoneWindow)
+        // when it is called before the window's decor view exists.
+        w.getDecorView();
         if (Build.VERSION.SDK_INT >= 30) {
             w.setDecorFitsSystemWindows(false);
-            WindowInsetsController ic = w.getInsetsController();
-            if (ic != null) {
-                int mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
-                ic.setSystemBarsAppearance(t.dark ? 0 : mask, mask);
-            }
+            try {
+                WindowInsetsController ic = w.getInsetsController();
+                if (ic != null) {
+                    int mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                    ic.setSystemBarsAppearance(t.dark ? 0 : mask, mask);
+                }
+            } catch (Throwable ignored) { /* bar icon colour is cosmetic; the theme's windowLightStatusBar still applies */ }
         } else {
             int f = View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
             if (!t.dark) f |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
