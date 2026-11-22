@@ -1,0 +1,142 @@
+# 路线图 · Roadmap
+
+> 状态：**0.1.0 测试版**（2026-11-22）。下面「已完成」指代码已经写完并编译通过，
+> 其中协议核心在 Band 10 真机上跑通过；「未验证」的项会单独标出来。
+
+## 为什么自己做（已经排除的路）
+
+这些是前期试过或评估过的方案，写在这里省得别人再走一遍：
+
+| 方案 | 结论 |
+|---|---|
+| 华为 Health Kit | 需要开发者实名资质（当时她未成年，过不了） |
+| 手环「心率广播」0x180D | 能用，但只给心率，没有血氧 / 压力 / 睡眠；而且是她明确不喜欢的路线 |
+| 现成的 Gadgetbridge | 能读数据（约 1 分钟一格的历史同步），但：① 界面她不要；② 要装个陌生 App；③ 更致命的是**她的鸿蒙手机把 Gadgetbridge 的原生网络请求静默拦掉了**（WebView 的 fetch 能通，`HttpURLConnection` 不行），所以拿 Gadgetbridge 当中转这条路走不通 |
+| 华为运动健康云端接口 | 要华为账号、数据经过华为云、多为每日汇总 |
+| 每天手动整理数据 | 她现在就是这么干的，正是想消灭的 |
+
+最后选了：**自己实现华为私有协议**，App 直连手环，数据留本机，再开一个 MCP 服务给 AI 查。
+Gadgetbridge 的源码是这条路的起点（AGPL-3.0，见 `NOTICE.md`），协议层大量移植自它。
+
+## 已完成
+
+### 协议层 `bandcore/`
+
+- [x] BLE 传输：扫描（按名字 / FE86 广播认设备）→ 连接 → 发现服务 → 订阅 `FE02` →
+      写队列（`WRITE_TYPE_NO_RESPONSE`，片间 22ms，失败回队头重试）→ 掉线重连 / 放弃后 5 分钟再试
+- [x] 帧编解码：magic `0x5A` + 长度 + serviceId + commandId + TLV；AES-ECB / CBC / GCM，
+      HKDF、HMAC；按 LinkParams 给的 sliceSize 分片；收包累积与多包消费
+- [x] CRC16、时区换算、字符串工具
+- [x] 认证状态机（`AuthFlow`）：
+      - LinkParams（第一个包，拿 protocolVersion / sliceSize / mtu / nonce / authVersion /
+        deviceSupportType / authAlgo / bondState / encryptMethod）
+      - SecurityNegotiation（authMode / androidId 等 → authType 分派）
+      - **HiChain**（Band 10 走这条：authType=0x5 → HiChain3，重连 op=2；首次 BIND + PIN 也实现了）
+      - **HiChainLite**（createSecretKey → PIN → Auth → BondParams → Bond）
+      - **Normal**（密钥从 secretKey 派生）
+      - 手环「忘了我们」时（authType=0x5 但本地记着已配对）自动改走首次绑定
+- [x] 身份持久化（`AuthState`）：`authkey` / 伪造的 `device_mac` / `android_id`，
+      以及「已配对」标记；App 里有「忘记配对」
+- [x] 设备初始化（`DeviceInit`）：设备信息、对时、电量、支持的服务与命令表、同意协议、
+      上报已连接、语言 / 日期 / 账号、打开手环的自动测量（自动心率 / 血氧 / 科学睡眠 / 抬腕亮屏）
+- [x] 请求框架（`RequestRunner`）：同步「发一个请求、等它的响应」，支持一次请求后手环连推多包的「流」
+- [x] 数据同步：
+      - 分钟数据（`StepSync`）：心率 / 血氧 / 步数 / 静息心率，先问页数再逐页拉
+      - 科学睡眠（`TruSleepSync` + `FileDownloader`）：走「新同步」的服务 `0x2C` 文件下载 +
+        序列数据解析 → 深睡 / 浅睡 / 快速眼动 / 清醒（每分钟阶段）+ 睡眠分 + 睡时心率血氧呼吸
+      - 压力（`StressSync`）：60 秒 RRI 校准 → HRV 特征 → 分数 → 打开自动压力 → 定期下载压力文件
+      - 情绪（`DictSync`）：P2P 字典同步（`0x34/0x01`），手环来通知或每 10 分钟拉
+      - 天气（`WeatherSync`）：按 GB 的顺序发单位 / 支持 / 日月 / 当前 / 24 小时 + 7 天预报
+      - 音乐（`MusicControl`）：回手环「在放什么」，收手环按键 → 手机播放器 / 音量
+- [x] 本机存档：`hw_samples.json`（10 天）、`hw_trusleep.json`（60 晚）、
+      `hw_stress.json` / `hw_dict_<类别>.json`（30 天）
+- [x] `Probe`：协议诊断日志（`hwauth` / `hwinit` / `hwsync` …），只走 logcat 和 App 回调，**不发网络**
+
+### App `app/`
+
+- [x] 常驻前台服务（`BandService`）：屏幕关掉也保持连接 + MCP 在跑
+- [x] 一屏 UI（`MainActivity`，纯系统 View，没有第三方库）：连接 / 同步 / 压力校准 /
+      MCP 地址口令（复制配置）/ 个人资料 / 日志查看
+- [x] 手机上的 MCP 服务（`McpServer`）：Streamable HTTP，`POST /mcp`，JSON-RPC 2.0
+      （initialize / ping / tools/list / tools/call），Bearer 口令或 `?token=`，无第三方库
+- [x] 6 个 MCP 工具：`band_status` / `band_now` / `band_day` / `band_sleep` / `band_stress` / `band_emotion`
+      —— 缺数据就返回空，不补数、不编数，答案带「记录时间 + 粒度」
+- [x] 天气（`WeatherFetch`）：Open-Meteo，粗位置（0.1°）
+- [x] 音乐（`Media` / `MediaListener`）：通知使用权 → 当前播放 → 手环音乐页
+- [x] 个人资料（身高 / 体重 / 生日 / 性别）发给手环，只存本机
+
+### 工程 / 文档
+
+- [x] 两个 Gradle 模块（`bandcore` 库 + `app`），AGP 8.13.0 / Gradle 8.14.3 / JDK 21，编译通过，
+      干净重建产物可复现（见 `RELEASE-0.1.md`）
+- [x] `LICENSE`（AGPL-3.0）、`NOTICE.md`（Gadgetbridge 来源与改动）、`README.md`、
+      `RELEASE-0.1.md`、本文件
+
+## 待做
+
+### P0 · 真机跑完 0.1（最优先，没有真机就没有结论）
+
+- [ ] 在 Band 10 + 鸿蒙手机上把 `dist/` 那个包完整走一遍：首次配对（PIN 分支）→ 分钟同步 →
+      科学睡眠 → 压力校准 → 情绪 → 天气 → 音乐 → 掉线重连 → 杀进程后重开
+- [ ] 用真实 AI 客户端（Claude Desktop / Cursor / 自写脚本）接上 MCP，6 个工具逐条调一遍
+- [ ] 把真机 `Probe` 日志里失败的分支记下来，按原因修（参考 `README` 的「已知的坑」）
+- [ ] 截图（App 一屏 + MCP 配置）放进 README
+
+### P1 · 功能
+
+- [ ] **更细的心率**：Band 10 没有实时通道（见「已知限制」）。可试的方向：
+      ① 运动模式 `0x17` 的心率流；② 提高 `0x07` 历史拉取频率（但手环本身约 1 分钟记一格，改不了这个）；
+      ③ 手环固件里是否有别的推送通道（需要真机试）。**没有真机验证前不要写进 README。**
+- [ ] 手机 → 手环通知（`Notifications` 报文类已经搬进来了，但没用起来）
+- [ ] 闹钟 / 找手机 / 久坐提醒
+- [ ] 表盘：不做（风险高，要传文件 + 改固件资源）
+- [ ] OTA 固件升级：不做（弄坏手环的风险不值得）
+- [ ] 更多型号（Band 9 / 11、Watch 系列）：命令表是连上后探测的，理论上能适配，
+      差异要逐型号摸。`HiChainPakeUtils`（PAKE / STS，Honor Watch 5 用）已经搬进来，
+      但 `AuthFlow` 还没接上调度
+- [ ] MCP：SSE 流（现在只回 JSON）、HTTPS、更多工具（周趋势 / 同步触发 / 数据导出）
+- [ ] 数据导出（给用户一份能读的 JSON / CSV）
+
+### P2 · 工程
+
+- [ ] 纯协议层单元测试（TLV、帧编解码、CRC、时间换算）—— 这些不需要硬件，能进 CI
+- [ ] CI：GitHub Actions 编 APK 当 artifact（协议部分没法在里面测）
+- [ ] 发布签名 + 版本号流程（现在只有 debug 签名）
+- [ ] UI 中英文字符串抽到资源、加图标、支持横屏 / 深色主题检查
+- [ ] 各厂商电池优化白名单的引导文案（国产 ROM 后台杀进程）
+- [ ] `AuthFlow` 接 PAKE / STS（等有 Honor 设备的贡献者）
+
+## 已知限制（诚实清单）
+
+1. **没有实时心率。** Band 10 的命令表里没有 `0x07/0x1c`（`EnableRealtimeHeartRate` 那条）；
+   Gadgetbridge 里也没有它的实现（`AsynchronousResponse` 里搜不到心率解析），
+   而且那命令本身只是「连续测心率模式」的开关，不推数据。手环大约**每分钟记一格**，
+   App 每分钟同步一次 —— 拿到的永远是最新那一格，不是「此刻正在跳多少」。
+2. **手环自带的情绪页打不开**：显示「手机运动健康 App 版本过低」。需要华为运动健康 +
+   华为云算法（`/healthAlgorithm/v1`），本项目模拟不了。App / MCP 里的情绪数据是直接拉回来的
+   原始值（愉悦度 / 激活度 / 状态码），状态码 → 文字是按数据推的，不是华为的定义。
+3. **只支持 Android**（8.0+）。没有 iOS 版，也不打算做（iOS 的 BLE 后台限制 + 同类问题）。
+4. **鸿蒙兼容层的网络限制**：鸿蒙 7 上原生 `HttpURLConnection` 会被静默拦掉（WebView 的能通），
+   所以把数据从别的 App（比如 Gadgetbridge）中转出去这条路走不通 —— 这也是本项目存在的直接原因。
+   本项目自己的网络请求（只有天气）在鸿蒙上是否能通，**还没在真机上确认**；
+   如果天气发不出去，App 其它功能不受影响。
+5. **必须跟华为运动健康解绑**：手环同一时间只跟一个 App 说话。解绑后手环屏幕会停在出厂引导页
+   （App 会补齐初始化步骤让它退出）；手环在引导页待太久会「忘掉」绑定，App 会自动重新绑定。
+6. **没有 adb / logcat**（鸿蒙 7 手机只有 HDC，要装 ~3GB SDK）。诊断只能靠 App 里的日志和
+   协议探针（`Probe`）。这限制了排错方式。
+7. **压力要一次校准**：手环的自动压力需要先有一次压力测试结果（App 里静坐 1 分钟）。
+   没校准就没有自动压力数据。
+8. **HRV（500044）/ 皮肤温度（400012）** 在 Band 10 上拿不到（字典类请求第一页就超时）。
+9. **数据有保留期**：分钟数据 10 天、科学睡眠 60 晚、压力 / 情绪 30 天。更早的只能从手环重新拉。
+10. **协议是逆向来的**：华为更新固件可能失效；`HuaweiPacket.parse` 只保留了 5 个 service 的响应映射，
+    其余 20 多个（Workout / OTA / Watchface / 文件传输 / 联系人…）走「只解密不解析」的默认分支。
+11. **debug 签名**：0.1 用的是 debug key，不是发布签名；不同签名之间不能覆盖安装。
+12. **这不是医疗设备**，数据不能用于诊断。
+
+## 不做 / 范围外
+
+- 云端方案（华为账号、Health Kit、任何把健康数据传到服务器的设计）
+- 绕过手环的安全机制、提取 / 分发密钥 —— 这里做的是「用官方 App 同样的身份跟手环说话」，
+  认证用的密钥是在配对时由手环和我们协商出来的，每台设备一份
+- 表盘、OTA（风险高，收益低）
+- iOS
