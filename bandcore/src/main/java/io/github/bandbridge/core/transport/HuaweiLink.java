@@ -76,6 +76,48 @@ public final class HuaweiLink {
     private static final long PICK_WIN = 2500L;
     private static final int  MAX_RETRY = 45;
 
+    /* ══ 认得的手环 ⇒ 交给系统蓝牙栈去等（autoConnect）══════════════════════
+       ── 为什么 ──
+         部分国产 ROM（实测华为 / 鸿蒙机型）在 App 退到后台后会冻结主线程 Handler 的定时器，
+         即使前台服务在跑也一样。扫描到手环后那 PICK_WIN「择优」定时器因此可能拖上好几分钟，
+         直到用户切回 App 才真正去连。凡是依赖「我们的代码在后台按时醒来」的环节都靠不住。
+       ── 做法 ──
+         ① 连成功过的手环地址存起来（SP_FILE / addr）。
+         ② 有存档地址 ⇒ 不扫，直接 connectGatt(autoConnect=true, TRANSPORT_LE)：
+              「等手环出现 → 建链」交给系统蓝牙栈（另一个进程，不受 App 冻结影响），
+              回调到了照常接着认证，不依赖任何定时器。
+         ③ 自动直连连续失败 AUTO_MAX_FAIL 次（比如 status 133）⇒ 这一轮退回扫描。
+         ④ 扫描时扫到存档地址 ⇒ 立刻连，不等 PICK_WIN 择优。
+         ⑤ 自动直连挂太久（AUTO_RECYCLE_MS）⇒ 重下一次（有的蓝牙栈会悄悄丢掉挂起的 autoConnect）。
+       ── 关掉 ── HuaweiLink.setAutoConnect(ctx, false)（存在 SP_FILE / auto，默认开）
+                 ⇒ 完全回到纯扫描方式 */
+    public static final String SP_FILE = "bandbridge_link";
+    private static final int  AUTO_MAX_FAIL = 3;
+    private static final long AUTO_RECYCLE_MS = 10 * 60 * 1000L;
+    private int autoFails = 0;
+    private boolean autoPending = false;
+    private int autoToken = 0;
+
+    /** 打开/关闭「认得的手环交给系统蓝牙栈自动连」。默认开；下次 start()/重扫时生效。 */
+    public static void setAutoConnect(Context c, boolean on) {
+        try { c.getApplicationContext().getSharedPreferences(SP_FILE, Context.MODE_PRIVATE).edit().putBoolean("auto", on).apply(); } catch (Throwable ignored) { }
+    }
+    public static boolean isAutoConnect(Context c) {
+        try { return c.getApplicationContext().getSharedPreferences(SP_FILE, Context.MODE_PRIVATE).getBoolean("auto", true); } catch (Throwable t) { return true; }
+    }
+    /** 忘掉存档的手环地址（解绑 / 换手环时调用）。 */
+    public static void forgetAddr(Context c) {
+        try { c.getApplicationContext().getSharedPreferences(SP_FILE, Context.MODE_PRIVATE).edit().remove("addr").apply(); } catch (Throwable ignored) { }
+    }
+    private boolean autoOn() { return isAutoConnect(ctx); }
+    private String savedAddr() {
+        try { return ctx.getSharedPreferences(SP_FILE, Context.MODE_PRIVATE).getString("addr", ""); } catch (Throwable t) { return ""; }
+    }
+    private void saveAddr(String a) {
+        if (a == null || a.isEmpty()) return;
+        try { ctx.getSharedPreferences(SP_FILE, Context.MODE_PRIVATE).edit().putString("addr", a).apply(); } catch (Throwable ignored) { }
+    }
+
     /* 写队列 —— 一次只许一片在飞 */
     private final ArrayDeque<byte[]> wq = new ArrayDeque<>();
     private boolean wBusy = false;
@@ -99,12 +141,15 @@ public final class HuaweiLink {
         retry = 0;
         gaveUp = false;
         lastErr = "";
+        autoFails = 0;
+        autoPending = false;
         beginScan();
     }
 
     public void stop() {
         want = false;
         ready = false;
+        autoPending = false;
         stopScan();
         closeGatt();
         synchronized (wq) { wq.clear(); wBusy = false; }
@@ -158,6 +203,11 @@ public final class HuaweiLink {
             closeGatt();
         }
         clearPick();
+        /* 认得的手环 ⇒ 交给系统蓝牙栈去等（见 SP_FILE 那段注释）*/
+        if (autoOn() && autoFails < AUTO_MAX_FAIL) {
+            String sa = savedAddr();
+            if (!sa.isEmpty() && connectAuto(sa)) return;
+        }
         try {
             /*
                按服务 UUID 过滤等于自己把门锁上。改成全扫 + 自己认名字/广告。 */
@@ -244,6 +294,11 @@ public final class HuaweiLink {
                 pickIt(d, addr, "cached");               // 上次连成功那台，一枪命中
                 return;
             }
+            /* 存档里那台（进程重启后 curAddr 是空的）⇒ 也立刻连，不等 PICK_WIN 择优 */
+            if (addr != null && !addr.isEmpty() && addr.equals(savedAddr())) {
+                pickIt(d, addr, "saved");
+                return;
+            }
             if (!pickArmed) {
                 pickArmed = true;
                 final int myId = ++pickId;
@@ -284,9 +339,41 @@ public final class HuaweiLink {
         }
     }
 
+    /** 认得的手环：不扫，直接把「等它出现再建链」交给系统蓝牙栈。返回 false ⇒ 调用方照旧去扫 */
+    @SuppressLint("MissingPermission")
+    private boolean connectAuto(String addr) {
+        try {
+            if (!BluetoothAdapter.checkBluetoothAddress(addr)) return false;
+            BluetoothDevice d = adapter.getRemoteDevice(addr);
+            stopScan();
+            curAddr = addr;
+            ready = false;
+            autoPending = true;
+            report("auto", "try=" + (autoFails + 1));
+            gatt = d.connectGatt(ctx, true, gattCb, BluetoothDevice.TRANSPORT_LE);
+            if (gatt == null) { autoPending = false; autoFails++; report("autofail", "gattnull"); return false; }
+            /* 挂太久就重下一次（这个定时器在后台被冻住也无妨：系统那边一直在等，回到前台再重下）*/
+            final int my = ++autoToken;
+            h.postDelayed(() -> {
+                if (!want || ready || !autoPending || my != autoToken) return;
+                report("autorecycle");
+                autoPending = false;
+                closeGatt();
+                beginScan();
+            }, AUTO_RECYCLE_MS);
+            return true;
+        } catch (Throwable t) {
+            autoPending = false;
+            autoFails++;
+            report("autofail", t.getClass().getSimpleName());
+            return false;
+        }
+    }
+
     /* ── 连接 / 订阅 ──────────────────────────────────────── */
 
     private void closeGatt() {
+        autoToken++;                                         // 旧的自动直连重下定时器作废
         BluetoothGatt g = gatt;
         gatt = null;
         writeChr = null;
@@ -303,7 +390,9 @@ public final class HuaweiLink {
         @Override public void onConnectionStateChange(BluetoothGatt g, int status, int st) {
             if (!want) { try { g.close(); } catch (Throwable t) {} return; }
             if (st == BluetoothProfile.STATE_CONNECTED) {
-                report("connected", "status=" + status);
+                report("connected", "status=" + status + (autoPending ? " via=auto" : ""));
+                autoPending = false;                    // 自动直连建链成功 ⇒ 后面与扫描连上的完全一样
+                autoToken++;
                 final int myId = ++pickId;
                 h.postDelayed(() -> {
                     if (!want || gatt != g || pickId != myId) return;
@@ -321,6 +410,8 @@ public final class HuaweiLink {
             } else if (st == BluetoothProfile.STATE_DISCONNECTED) {
                 if (g != gatt) { try { g.close(); } catch (Throwable t) {} return; }
                 report("disconnected", "status=" + status);
+                /* 还没建上链就断 = 自动直连失败（比如 133）⇒ 记一次；攒够 AUTO_MAX_FAIL 次这轮改回扫描 */
+                if (autoPending) { autoPending = false; autoFails++; report("autofail", "status=" + status + " n=" + autoFails); }
                 closeGatt();
                 ready = false;
                 if (want) { listener.onLost("disconnected"); retryLater(); }
@@ -377,6 +468,8 @@ public final class HuaweiLink {
             ready = true;
             retry = 0;
             lastErr = "";
+            autoFails = 0;                              // 连上了 ⇒ 记住这台，下次直接交给系统蓝牙栈等
+            saveAddr(curAddr);
             report("ready", curAddr);
             listener.onReady();
             h.post(HuaweiLink.this::pump);

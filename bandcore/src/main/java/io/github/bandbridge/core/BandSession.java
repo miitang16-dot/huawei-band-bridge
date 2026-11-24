@@ -231,6 +231,7 @@ public final class BandSession {
     public void forget() {
         try { app.getSharedPreferences(PAIR_SP, Context.MODE_PRIVATE).edit().clear().apply(); } catch (Throwable ignored) { }
         try { app.getSharedPreferences(io.github.bandbridge.core.auth.AuthState.PREF_FILE, Context.MODE_PRIVATE).edit().clear().apply(); } catch (Throwable ignored) { }
+        io.github.bandbridge.core.transport.HuaweiLink.forgetAddr(app);   // also forget the saved band address (autoConnect target)
     }
 
     /* ── lifecycle ──────────────────────────────────────────────────────────── */
