@@ -57,7 +57,7 @@ public class MainActivity extends Activity {
     private TextView hrBpm, hrUnit, hrState, hrFoot, hrHelp, hr1Btn, hr3Btn, hrStopBtn;
     private TextView[] hrStat = new TextView[6];
     /* features */
-    private TextView calibSub, calibBtn, musicSub, musicBtn;
+    private TextView calibSub, calibBtn, musicSub, musicBtn, bondSub, bondBtn;
     private TextView batterySub, batteryBtn;
     private Switch bootSwitch;
     /* MCP */
@@ -260,6 +260,25 @@ public class MainActivity extends Activity {
             if (s == null || s.session == null || !s.session.calibrateStress()) toast("手环还没连上");
         });
         calibSub = ui.row(g, "压力校准", "", calibBtn, null);
+
+        /* 登记到手机蓝牙（系统配对）：只在用户手动点时做，绝不自动 */
+        bondBtn = ui.chipButton("登记", v -> {
+            BandService s = BandService.instance;
+            BandSession bs = s == null ? null : s.session;
+            if (bs == null) { toast("手环还没连上"); return; }
+            String r;
+            if (bs.sysBondState() == android.bluetooth.BluetoothDevice.BOND_BONDED) {
+                r = bs.sysUnbond();
+                toast("ok".equals(r) || "already".equals(r) ? "已从手机蓝牙里取消登记" : "取消登记没成功：" + r);
+            } else {
+                r = bs.sysBond();
+                toast("ok".equals(r) ? "已发起配对，手机或手环上可能要确认一下"
+                        : "already".equals(r) ? "已经登记过了"
+                        : "notready".equals(r) ? "先等手环连上再登记" : "登记没成功：" + r);
+            }
+            refresh();
+        });
+        bondSub = ui.row(g, "登记到手机蓝牙", "", bondBtn, null);
 
         musicBtn = ui.chipButton("去开启", v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
         musicSub = ui.row(g, "手环音乐页", "", musicBtn, null);
@@ -567,6 +586,14 @@ public class MainActivity extends Activity {
             Ui.enable(calibBtn, bs.isReady() && !bs.calibrating());
             calibBtn.setText(bs.calibration() != null ? "重新校准" : "校准");
         }
+        int bond = bs == null ? -1 : bs.sysBondState();
+        boolean bonded = bond == android.bluetooth.BluetoothDevice.BOND_BONDED;
+        bondSub.setText(bond == -1 ? "连上手环后，可以让它出现在手机的蓝牙设备列表里"
+                : bonded ? "手机蓝牙里：已登记（不影响手环桥的连接）"
+                : bond == android.bluetooth.BluetoothDevice.BOND_BONDING ? "手机蓝牙里：正在配对…"
+                : "手机蓝牙里：没登记。手环桥不需要配对也能用，登记只是让系统蓝牙列表里看得到它");
+        bondBtn.setText(bonded ? "取消登记" : "登记");
+        Ui.enable(bondBtn, bs != null && (bonded || bs.isReady()));
         boolean music = Media.hasAccess(this);
         musicSub.setText(music ? "手环能切歌，也会显示歌名" : "手环能切歌和暂停。开启通知使用权后还能显示歌名");
         musicBtn.setVisibility(music ? View.GONE : View.VISIBLE);

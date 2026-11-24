@@ -132,6 +132,10 @@ public final class BandSession {
     public DictStore emotion() { return emotion; }
     public int phase() { return phase; }
     public boolean isReady() { return phase == PHASE_READY; }
+    /* System Bluetooth bond (see HuaweiLink.sysBond). Manual, user-initiated only. */
+    public int sysBondState() { HuaweiLink l = link; return l == null ? -1 : l.sysBondState(); }
+    public String sysBond() { HuaweiLink l = link; return (l == null || !isReady()) ? "notready" : l.sysBond(); }
+    public String sysUnbond() { HuaweiLink l = link; return l == null ? "nolink" : l.sysUnbond(); }
     public String lastError() { return lastErr; }
     public String stage() { return lastStage; }
     public long lastDataAt() { return lastDataAt; }

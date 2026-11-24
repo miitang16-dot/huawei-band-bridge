@@ -339,6 +339,56 @@ public final class HuaweiLink {
         }
     }
 
+    /* ══ 登记到系统蓝牙（系统配对 bond）══════════════════════════════════════
+       系统蓝牙设置只列【配对过（bond）】的设备；本库默认是不配对直连 ⇒ 系统蓝牙列表里看不到手环。
+       这里只提供一个【用户手动触发】的入口：对【已连上】的手环调 createBond()
+       （系统可能弹配对确认，手环上也可能要点一下）。全文件只有这一处 createBond，
+       自动直连 / 扫描路径里绝不偷偷配对。
+       实测（华为机型 + HUAWEI Band 10）：配对后 App 这条连接不受影响；仍提供反悔键 sysUnbond()。
+       ⚠️ 手环有 HID 服务（0x1812），配对后系统可能把它当成遥控器/键盘一类外设，这是系统行为。 */
+    /** 系统配对状态：10=没配对 11=配对中 12=已配对 -1=不知道（没连着） */
+    @SuppressLint("MissingPermission")
+    public int sysBondState() {
+        try {
+            BluetoothDevice d = sysDevice();
+            return d == null ? -1 : d.getBondState();
+        } catch (Throwable t) { return -1; }
+    }
+    @SuppressLint("MissingPermission")
+    private BluetoothDevice sysDevice() {
+        try {
+            if (gatt != null) return gatt.getDevice();
+            String a = curAddr.isEmpty() ? savedAddr() : curAddr;
+            if (a.isEmpty() || adapter == null || !BluetoothAdapter.checkBluetoothAddress(a)) return null;
+            return adapter.getRemoteDevice(a);
+        } catch (Throwable t) { return null; }
+    }
+    /** 发起系统配对；返回 "ok" / "already" / "notready" / "fail" / 异常名 */
+    @SuppressLint("MissingPermission")
+    public String sysBond() {
+        try {
+            if (!ready || gatt == null) return "notready";
+            BluetoothDevice d = gatt.getDevice();
+            if (d.getBondState() == BluetoothDevice.BOND_BONDED) return "already";
+            boolean ok = d.createBond();
+            report("sysbond", ok ? "start" : "false");
+            return ok ? "ok" : "fail";
+        } catch (Throwable t) { report("sysbond", "x " + t.getClass().getSimpleName()); return t.getClass().getSimpleName(); }
+    }
+    /** 取消系统配对（反悔键；Android 没有公开 API，只能反射 removeBond）；返回 "ok" / "already" / "nodev" / "fail" / 异常名 */
+    @SuppressLint("MissingPermission")
+    public String sysUnbond() {
+        try {
+            BluetoothDevice d = sysDevice();
+            if (d == null) return "nodev";
+            if (d.getBondState() == BluetoothDevice.BOND_NONE) return "already";
+            Object r = d.getClass().getMethod("removeBond").invoke(d);
+            boolean ok = Boolean.TRUE.equals(r);
+            report("sysunbond", ok ? "ok" : "false");
+            return ok ? "ok" : "fail";
+        } catch (Throwable t) { report("sysunbond", "x " + t.getClass().getSimpleName()); return t.getClass().getSimpleName(); }
+    }
+
     /** 认得的手环：不扫，直接把「等它出现再建链」交给系统蓝牙栈。返回 false ⇒ 调用方照旧去扫 */
     @SuppressLint("MissingPermission")
     private boolean connectAuto(String addr) {
