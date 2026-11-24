@@ -3,7 +3,7 @@
 **让 AI 直接读你的华为手环。不用华为运动健康，不用华为账号，数据不上任何云。**
 *Let your AI read your Huawei band directly: no Huawei Health app, no Huawei ID, no cloud.*（[English](README.en.md)）
 
-> 🧪 **测试版**（当前 0.1.9）。协议核心在一台 HUAWEI Band 10 上跑通了，App 和 MCP 服务还在逐项上真机验证。
+> 🧪 **测试版**（当前 0.1.10）。协议核心在一台 HUAWEI Band 10 上跑通了，App 和 MCP 服务还在逐项上真机验证。
 > 下面每一项都标了证据等级，没在真机上验过的不会写成「已验证」。
 
 <img src="docs/screenshots/main-heart-rate.jpg" width="320" alt="手环桥 0.1.1 主界面：连接状态和心跳直播的逐拍读数">
@@ -61,7 +61,8 @@
 
 | 版本 | 文件 | 说明 |
 |---|---|---|
-| `0.1.9`（2026-11-23） | [`dist/huawei-band-bridge-0.1.9-debug.apk`](dist/huawei-band-bridge-0.1.9-debug.apk) | **推荐**。新界面在真机上修好；后台保活；崩溃记录；心跳直播结论改为「成批推送、秒级延迟」 |
+| `0.1.10`（2026-11-24） | [`dist/huawei-band-bridge-0.1.10-debug.apk`](dist/huawei-band-bridge-0.1.10-debug.apk) | **推荐**。连过的手环交给系统蓝牙自动连（切后台也能连上）；可选「登记到手机蓝牙」 |
+| `0.1.9`（2026-11-23） | [`dist/huawei-band-bridge-0.1.9-debug.apk`](dist/huawei-band-bridge-0.1.9-debug.apk) | 新界面在真机上修好；后台保活；崩溃记录；心跳直播结论改为「成批推送、秒级延迟」 |
 | `0.1.4`（2026-11-23） | [`dist/huawei-band-bridge-0.1.4-debug.apk`](dist/huawei-band-bridge-0.1.4-debug.apk) | 界面重做。**在 Android 16 上一打开就闪退，请用 0.1.9** |
 | `0.1.3`（2026-11-23） | [`dist/huawei-band-bridge-0.1.3-debug.apk`](dist/huawei-band-bridge-0.1.3-debug.apk) | 修日志里的密钥泄露；心跳卡显示「有效 / 丢弃 / 样本合计 / 包数」；其余同 0.1.2 |
 | `0.1.2`（2026-11-23） | [`dist/huawei-band-bridge-0.1.2-debug.apk`](dist/huawei-band-bridge-0.1.2-debug.apk) | 加「健康」页；心跳直播的「丢掉」拆成 `sqi0` / `范围` 两类 |
@@ -75,7 +76,7 @@
 
 下载：上面的 `dist/` 链接，或 [Releases](https://github.com/miitang16-dot/huawei-band-bridge/releases)
 （GitHub 的 raw 域名在部分网络下不稳）。每个版本的校验值 / 构建方式 / 已验证清单见
-[`RELEASE-0.1.9.md`](RELEASE-0.1.9.md)、[`RELEASE-0.1.4.md`](RELEASE-0.1.4.md)、[`RELEASE-0.1.3.md`](RELEASE-0.1.3.md)、[`RELEASE-0.1.2.md`](RELEASE-0.1.2.md)、
+[`RELEASE-0.1.10.md`](RELEASE-0.1.10.md)、[`RELEASE-0.1.9.md`](RELEASE-0.1.9.md)、[`RELEASE-0.1.4.md`](RELEASE-0.1.4.md)、[`RELEASE-0.1.3.md`](RELEASE-0.1.3.md)、[`RELEASE-0.1.2.md`](RELEASE-0.1.2.md)、
 [`RELEASE-0.1.1.md`](RELEASE-0.1.1.md)。
 
 ## 用 MCP 查数据
