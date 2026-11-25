@@ -66,6 +66,9 @@ final class HealthData {
     long[] sleepRunStart = new long[0];
     int[] sleepRunMin = new int[0];
     int[] sleepRunCode = new int[0];
+    /* naps that woke up the same day as the night above (already counted in sleepTotalMin) */
+    int sleepNapMin;
+    String sleepNapText = "";
 
     /* stress (today for the timeline, newest for the tile) */
     boolean hasStress;
@@ -193,16 +196,39 @@ final class HealthData {
     /* ── TruSleep ───────────────────────────────────────────────────────── */
 
     private static void readSleep(HealthData d, TruSleepStore store) {
-        JSONObject night = lastNight(store, d.nowMs - 36 * 3600_000L);
-        if (night == null) night = lastNight(store, d.nowMs - 7 * 86_400_000L);
+        /* Today's sleep = the longest record that woke up today (the night) + the other ones (naps).
+           Taking "the record that woke up last" let a 10:00 nap replace the whole night. */
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        c.setTimeInMillis(d.nowMs);
+        c.set(java.util.Calendar.HOUR_OF_DAY, 0); c.set(java.util.Calendar.MINUTE, 0);
+        c.set(java.util.Calendar.SECOND, 0); c.set(java.util.Calendar.MILLISECOND, 0);
+        long today0 = c.getTimeInMillis();
+        SleepDay day = SleepDay.of(store.query(today0 - 18 * 3600_000L, d.nowMs).optJSONArray("nights"), today0, d.nowMs + 1);
+        JSONObject night;
+        if (day != null) night = day.main;
+        else {
+            night = lastNight(store, d.nowMs - 36 * 3600_000L);
+            if (night == null) night = lastNight(store, d.nowMs - 7 * 86_400_000L);
+        }
         if (night == null) return;
         long fall = night.optLong("fall"), wake = night.optLong("wake");
         if (fall <= 0 || wake <= fall) return;
         JSONObject by = night.optJSONObject("byCode");
         int light = by == null ? 0 : by.optInt("1"), rem = by == null ? 0 : by.optInt("2"),
                 deep = by == null ? 0 : by.optInt("3"), awake = by == null ? 0 : by.optInt("4");
-        int total = light + rem + deep;
-        if (total <= 0) total = (int) Math.max(0, (wake - fall) / 60_000L);
+        int total = SleepDay.minutes(night);
+        d.sleepNapMin = 0;
+        d.sleepNapText = "";
+        if (day != null && day.napMin > 0) {
+            d.sleepNapMin = day.napMin;
+            StringBuilder sb = new StringBuilder();
+            for (JSONObject n : day.naps) {
+                if (sb.length() > 0) sb.append("、");
+                sb.append(SleepDay.hhmm(n.optLong("fall"))).append("→").append(SleepDay.hhmm(n.optLong("wake")));
+            }
+            d.sleepNapText = sb.toString();
+            total += day.napMin;
+        }
         d.hasSleep = true;
         d.sleepFallMs = fall; d.sleepWakeMs = wake;
         d.sleepScore = night.optInt("score");

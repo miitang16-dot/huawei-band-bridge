@@ -3,7 +3,7 @@
 **Let your AI read your Huawei band directly. No Huawei Health app, no Huawei ID, no cloud.**
 ([中文](README.md))
 
-> 🧪 **Test release** (currently 0.1.10). The protocol core runs on one HUAWEI Band 10. The app and the MCP
+> 🧪 **Test release** (currently 0.1.11). The protocol core runs on one HUAWEI Band 10. The app and the MCP
 > server are still being checked feature by feature on a real device. Every item below carries an evidence
 > level, and nothing that has not run on a device is called "verified".
 
@@ -99,7 +99,7 @@ Clients that cannot set headers can use `…/mcp?token=<token>`.
 | `band_status` | Connected or not, model, battery, newest data time, whether stress is calibrated |
 | `band_now` | Latest heart rate / SpO₂ / resting HR / today's steps / stress / emotion / last night's sleep, each with its record time |
 | `band_day` | Heart rate / SpO₂ / steps for a day or time range: stats plus a series (coarser for long ranges, granularity stated) |
-| `band_sleep` | The sleep that ended on a given morning: fell asleep / woke up, score, stage minutes, sleeping HR and SpO₂, stage timeline |
+| `band_sleep` | The sleep that ended on a given morning: fell asleep / woke up, score, stage minutes, sleeping HR and SpO₂, stage timeline; same-day naps listed separately (`naps` / `napMin`, `dayTotalMin` = night + naps) |
 | `band_stress` | Stress readings for a day (1–99 plus level) |
 | `band_emotion` | Emotion readings for a day (valence / arousal / three-level state) |
 | `band_hr_live` | Beat-by-beat heart rate: pass `seconds` (5–180) to measure; omit it to read the current or last run |

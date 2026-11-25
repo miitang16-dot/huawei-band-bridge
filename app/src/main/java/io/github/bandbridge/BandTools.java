@@ -37,7 +37,7 @@ final class BandTools {
                         .put("from", str("Optional HH:MM start (local time)"))
                         .put("to", str("Optional HH:MM end (local time)"))));
         a.put(tool("band_sleep", "TruSleep for the night that ended on the given date: fall asleep / wake time, score, minutes of deep / light / REM / awake, "
-                + "wake-ups, sleep heart rate and SpO2, and the stage timeline.",
+                + "wake-ups, sleep heart rate and SpO2, and the stage timeline. Naps that ended the same day are listed separately (naps / napMin; dayTotalMin = night + naps).",
                 props().put("date", str("YYYY-MM-DD of the wake-up day, default today"))));
         a.put(tool("band_stress", "Stress scores the band measured on a day (1-99: 1-29 relaxed, 30-59 normal, 60-79 medium, 80-99 high). "
                 + "Needs a one-time calibration in the app.",
@@ -202,19 +202,20 @@ final class BandTools {
         long d0 = dayStart(date);
         JSONObject q = s.truSleep().query(d0 - 18 * 3600_000L, d0 + 86400_000L);
         JSONArray nights = q.getJSONArray("nights");
-        JSONObject best = null;
-        for (int k = 0; k < nights.length(); k++) {
-            JSONObject n = nights.getJSONObject(k);
-            long w = n.optLong("wake");
-            if (w >= d0 && w < d0 + 86400_000L && (best == null || w > best.optLong("wake"))) best = n;
-        }
+        /* The night = the longest record that woke up on this day; the others are naps.
+           (Picking the one that woke up last let a morning nap replace the whole night.) */
+        SleepDay day = SleepDay.of(nights, d0, d0 + 86400_000L);
+        JSONObject best = day == null ? null : day.main;
         JSONObject o = new JSONObject().put("date", ymd(d0));
         if (best == null) return o.put("found", false).put("note", "No TruSleep record ending on this day (band not worn, or not synced yet).");
         JSONObject bc = best.optJSONObject("byCode");
         int light = bc == null ? 0 : bc.optInt("1"), rem = bc == null ? 0 : bc.optInt("2"), deep = bc == null ? 0 : bc.optInt("3"), awake = bc == null ? 0 : bc.optInt("4");
         o.put("found", true);
         o.put("asleep", hhmm(best.optLong("fall"))).put("woke", hhmm(best.optLong("wake")));
-        o.put("totalMin", light + rem + deep);
+        o.put("totalMin", day.mainMin);
+        JSONArray naps = new JSONArray();
+        for (JSONObject n : day.naps) naps.put(new JSONObject().put("asleep", hhmm(n.optLong("fall"))).put("woke", hhmm(n.optLong("wake"))).put("min", SleepDay.minutes(n)));
+        o.put("naps", naps).put("napMin", day.napMin).put("dayTotalMin", day.totalMin());
         o.put("deepMin", deep).put("lightMin", light).put("remMin", rem).put("awakeMin", awake);
         o.put("score", best.optInt("score"));
         o.put("wakeCount", best.optInt("wakeCount"));

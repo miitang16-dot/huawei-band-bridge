@@ -3,7 +3,7 @@
 **让 AI 直接读你的华为手环。不用华为运动健康，不用华为账号，数据不上任何云。**
 *Let your AI read your Huawei band directly: no Huawei Health app, no Huawei ID, no cloud.*（[English](README.en.md)）
 
-> 🧪 **测试版**（当前 0.1.10）。协议核心在一台 HUAWEI Band 10 上跑通了，App 和 MCP 服务还在逐项上真机验证。
+> 🧪 **测试版**（当前 0.1.11）。协议核心在一台 HUAWEI Band 10 上跑通了，App 和 MCP 服务还在逐项上真机验证。
 > 下面每一项都标了证据等级，没在真机上验过的不会写成「已验证」。
 
 <img src="docs/screenshots/main-heart-rate.jpg" width="320" alt="手环桥 0.1.1 主界面：连接状态和心跳直播的逐拍读数">
@@ -61,7 +61,8 @@
 
 | 版本 | 文件 | 说明 |
 |---|---|---|
-| `0.1.10`（2026-11-24） | [`dist/huawei-band-bridge-0.1.10-debug.apk`](dist/huawei-band-bridge-0.1.10-debug.apk) | **推荐**。连过的手环交给系统蓝牙自动连（切后台也能连上）；可选「登记到手机蓝牙」 |
+| `0.1.11`（2026-11-25） | [`dist/huawei-band-bridge-0.1.11-debug.apk`](dist/huawei-band-bridge-0.1.11-debug.apk) | **推荐**。修：白天小睡顶掉夜里那一觉（健康页和 `band_sleep`）；小睡算进总睡眠 |
+| `0.1.10`（2026-11-24） | [`dist/huawei-band-bridge-0.1.10-debug.apk`](dist/huawei-band-bridge-0.1.10-debug.apk) | 连过的手环交给系统蓝牙自动连（切后台也能连上）；可选「登记到手机蓝牙」 |
 | `0.1.9`（2026-11-23） | [`dist/huawei-band-bridge-0.1.9-debug.apk`](dist/huawei-band-bridge-0.1.9-debug.apk) | 新界面在真机上修好；后台保活；崩溃记录；心跳直播结论改为「成批推送、秒级延迟」 |
 | `0.1.4`（2026-11-23） | [`dist/huawei-band-bridge-0.1.4-debug.apk`](dist/huawei-band-bridge-0.1.4-debug.apk) | 界面重做。**在 Android 16 上一打开就闪退，请用 0.1.9** |
 | `0.1.3`（2026-11-23） | [`dist/huawei-band-bridge-0.1.3-debug.apk`](dist/huawei-band-bridge-0.1.3-debug.apk) | 修日志里的密钥泄露；心跳卡显示「有效 / 丢弃 / 样本合计 / 包数」；其余同 0.1.2 |
@@ -76,7 +77,7 @@
 
 下载：上面的 `dist/` 链接，或 [Releases](https://github.com/miitang16-dot/huawei-band-bridge/releases)
 （GitHub 的 raw 域名在部分网络下不稳）。每个版本的校验值 / 构建方式 / 已验证清单见
-[`RELEASE-0.1.10.md`](RELEASE-0.1.10.md)、[`RELEASE-0.1.9.md`](RELEASE-0.1.9.md)、[`RELEASE-0.1.4.md`](RELEASE-0.1.4.md)、[`RELEASE-0.1.3.md`](RELEASE-0.1.3.md)、[`RELEASE-0.1.2.md`](RELEASE-0.1.2.md)、
+[`RELEASE-0.1.11.md`](RELEASE-0.1.11.md)、[`RELEASE-0.1.10.md`](RELEASE-0.1.10.md)、[`RELEASE-0.1.9.md`](RELEASE-0.1.9.md)、[`RELEASE-0.1.4.md`](RELEASE-0.1.4.md)、[`RELEASE-0.1.3.md`](RELEASE-0.1.3.md)、[`RELEASE-0.1.2.md`](RELEASE-0.1.2.md)、
 [`RELEASE-0.1.1.md`](RELEASE-0.1.1.md)。
 
 ## 用 MCP 查数据
@@ -102,7 +103,7 @@ AI 和手机要在同一个局域网（或 Tailscale 之类的组网）。不能
 | `band_status` | 连没连上、型号、电量、最新数据到几点、压力校准了没 |
 | `band_now` | 最新的心率 / 血氧 / 静息心率 / 今天步数 / 压力 / 情绪 / 昨晚睡眠（每项带记录时间） |
 | `band_day` | 某天或某时段的心率 / 血氧 / 步数统计 + 分段序列（长时段自动放粗，写明粒度） |
-| `band_sleep` | 某天早上醒来那一觉：入睡 / 醒来、睡眠分、深浅 REM 清醒分钟、睡时心率血氧、阶段时间线 |
+| `band_sleep` | 某天早上醒来那一觉：入睡 / 醒来、睡眠分、深浅 REM 清醒分钟、睡时心率血氧、阶段时间线；同一天的小睡单独列出（`naps` / `napMin`，`dayTotalMin` = 夜里 + 小睡） |
 | `band_stress` | 某天手环测的压力（1–99 + 档位） |
 | `band_emotion` | 某天手环测的情绪（愉悦度 / 激活度 / 三档状态） |
 | `band_hr_live` | 逐拍心率：传 `seconds`（5–180）测一段；不传读当前/最近一次。没在测就说没在测 |

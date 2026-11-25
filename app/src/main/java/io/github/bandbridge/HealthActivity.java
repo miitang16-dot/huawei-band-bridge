@@ -496,7 +496,8 @@ public class HealthActivity extends Activity {
             setValue(sleepVal, hm[0], "时", hm[1], "分");
             sleepStages.setData(d.sleepFallMs, d.sleepWakeMs, d.sleepRunStart, d.sleepRunMin, d.sleepRunCode,
                     Charts.Palette.SLEEP, track, true);
-            sleepSub.setText(hhmm(d.sleepFallMs) + "→" + hhmm(d.sleepWakeMs) + (d.sleepScore > 0 ? " · " + d.sleepScore + " 分" : ""));
+            sleepSub.setText(hhmm(d.sleepFallMs) + "→" + hhmm(d.sleepWakeMs) + (d.sleepScore > 0 ? " · " + d.sleepScore + " 分" : "")
+                    + (d.sleepNapMin > 0 ? " · 小睡 " + hmShort(d.sleepNapMin) : ""));
         } else {
             sleepVal.setText("—");
             sleepStages.setData(0, 0, new long[0], new int[0], new int[0],
@@ -565,6 +566,7 @@ public class HealthActivity extends Activity {
         lg.append("    ").append(legendLine(alpha(Charts.Palette.SLEEP, 0.55f), "浅睡", hmShort(d.sleepLightMin)));
         lg.append("    ").append(legendLine(0xFF8FB7E8, "快速眼动", hmShort(d.sleepRemMin)));
         lg.append("    ").append(legendLine(0xFFF0C46A, "清醒", hmShort(d.sleepAwakeMin)));
+        if (d.sleepNapMin > 0) lg.append("\n小睡 ").append(hmShort(d.sleepNapMin)).append("（").append(d.sleepNapText).append("）· 已算进总时长");
         if (d.sleepAvgHr > 0) lg.append("\n睡时平均心率 ").append(String.valueOf(d.sleepAvgHr));
         if (d.sleepMinSpo > 0) lg.append(d.sleepAvgHr > 0 ? " · " : "\n").append("睡时最低血氧 ").append(d.sleepMinSpo + "%");
         if (d.sleepAvgBreath > 0) lg.append(" · 平均呼吸 ").append(d.sleepAvgBreath + " 次/分");
