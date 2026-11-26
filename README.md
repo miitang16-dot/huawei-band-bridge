@@ -3,7 +3,7 @@
 **让 AI 直接读你的华为手环。不用华为运动健康，不用华为账号，数据不上任何云。**
 *Let your AI read your Huawei band directly: no Huawei Health app, no Huawei ID, no cloud.*（[English](README.en.md)）
 
-> 🧪 **测试版**（当前 0.1.12）。协议核心在一台 HUAWEI Band 10 上跑通了，App 和 MCP 服务还在逐项上真机验证。
+> 🧪 **测试版**（当前 0.1.13）。协议核心在一台 HUAWEI Band 10 上跑通了，App 和 MCP 服务还在逐项上真机验证。
 > 下面每一项都标了证据等级，没在真机上验过的不会写成「已验证」。
 
 <img src="docs/screenshots/main-heart-rate.jpg" width="320" alt="手环桥 0.1.1 主界面：连接状态和心跳直播的逐拍读数">
@@ -24,7 +24,7 @@
 | 设备 / 环境 | 状态 |
 |---|---|
 | HUAWEI Band 10（`Nora-B19FP`）+ HarmonyOS 7 手机 | **已实测**：认证、初始化、分钟数据、TruSleep、压力、情绪、逐拍心率 |
-| HUAWEI Band 7 | **用户反馈，部分可用**：能连、能同步数据、表盘能看时间；但按侧边键会弹回「绑定华为运动健康」引导页，手环上的睡眠 / 压力页和手动开始运动用不了。0.1.12 起「复制诊断信息」能把原因带回来 |
+| HUAWEI Band 7（`Leia-B29`，固件 2.0.0.68） | **用户反馈，部分可用**：能连、能同步心率 / 血氧 / 步数，表盘正常；0.1.12 后侧边键基本不再弹引导页（刚重新绑定后一小段时间会弹）。睡眠走基础睡眠（0.1.13 起，没有快速眼动 / 睡眠分）。手环上的压力页和手动开始运动还待确认 |
 | 其它 Band 型号（Band 9 / 11 等） | **未验证**。命令表是连上后探测的，理论上可适配，但差异要逐型号摸 |
 | 其它固件版本（同型号） | **未验证**。华为更新固件可能改协议 |
 | Honor Watch 5（PAKE / STS） | **部分移植**：算法在 `HiChainPakeUtils`，`AuthFlow` 还没接上调度 |
@@ -62,7 +62,8 @@
 
 | 版本 | 文件 | 说明 |
 |---|---|---|
-| `0.1.12`（2026-11-26） | [`dist/huawei-band-bridge-0.1.12-debug.apk`](dist/huawei-band-bridge-0.1.12-debug.apk) | **推荐**。加「复制诊断信息」；补时区和老款账号命令（为 Band 7 排查引导页） |
+| `0.1.13`（2026-11-26） | [`dist/huawei-band-bridge-0.1.13-debug.apk`](dist/huawei-band-bridge-0.1.13-debug.apk) | **推荐**。Band 7 等老款手环的睡眠能同步了（基础睡眠：浅 / 深 / 醒）；回答生理期请求 |
+| `0.1.12`（2026-11-26） | [`dist/huawei-band-bridge-0.1.12-debug.apk`](dist/huawei-band-bridge-0.1.12-debug.apk) | 加「复制诊断信息」；补时区和老款账号命令（为 Band 7 排查引导页） |
 | `0.1.11`（2026-11-25） | [`dist/huawei-band-bridge-0.1.11-debug.apk`](dist/huawei-band-bridge-0.1.11-debug.apk) | 修：白天小睡顶掉夜里那一觉（健康页和 `band_sleep`）；小睡算进总睡眠 |
 | `0.1.10`（2026-11-24） | [`dist/huawei-band-bridge-0.1.10-debug.apk`](dist/huawei-band-bridge-0.1.10-debug.apk) | 连过的手环交给系统蓝牙自动连（切后台也能连上）；可选「登记到手机蓝牙」 |
 | `0.1.9`（2026-11-23） | [`dist/huawei-band-bridge-0.1.9-debug.apk`](dist/huawei-band-bridge-0.1.9-debug.apk) | 新界面在真机上修好；后台保活；崩溃记录；心跳直播结论改为「成批推送、秒级延迟」 |
@@ -79,7 +80,7 @@
 
 下载：上面的 `dist/` 链接，或 [Releases](https://github.com/miitang16-dot/huawei-band-bridge/releases)
 （GitHub 的 raw 域名在部分网络下不稳）。每个版本的校验值 / 构建方式 / 已验证清单见
-[`RELEASE-0.1.12.md`](RELEASE-0.1.12.md)、[`RELEASE-0.1.11.md`](RELEASE-0.1.11.md)、[`RELEASE-0.1.10.md`](RELEASE-0.1.10.md)、[`RELEASE-0.1.9.md`](RELEASE-0.1.9.md)、[`RELEASE-0.1.4.md`](RELEASE-0.1.4.md)、[`RELEASE-0.1.3.md`](RELEASE-0.1.3.md)、[`RELEASE-0.1.2.md`](RELEASE-0.1.2.md)、
+[`RELEASE-0.1.13.md`](RELEASE-0.1.13.md)、[`RELEASE-0.1.12.md`](RELEASE-0.1.12.md)、[`RELEASE-0.1.11.md`](RELEASE-0.1.11.md)、[`RELEASE-0.1.10.md`](RELEASE-0.1.10.md)、[`RELEASE-0.1.9.md`](RELEASE-0.1.9.md)、[`RELEASE-0.1.4.md`](RELEASE-0.1.4.md)、[`RELEASE-0.1.3.md`](RELEASE-0.1.3.md)、[`RELEASE-0.1.2.md`](RELEASE-0.1.2.md)、
 [`RELEASE-0.1.1.md`](RELEASE-0.1.1.md)。
 
 ## 用 MCP 查数据

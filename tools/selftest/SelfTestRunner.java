@@ -1,6 +1,7 @@
 import io.github.bandbridge.core.proto.CheckSumsSelfTest;
 import io.github.bandbridge.core.proto.HuaweiPacketFrameSelfTest;
 import io.github.bandbridge.core.proto.HuaweiUtilSelfTest;
+import io.github.bandbridge.core.proto.LegacySleepNightsSelfTest;
 import io.github.bandbridge.core.proto.TlvSelfTest;
 import io.github.bandbridge.core.proto.hr.RriBeatsSelfTest;
 import io.github.bandbridge.core.testing.T;
@@ -29,6 +30,7 @@ public final class SelfTestRunner {
         HuaweiPacketFrameSelfTest.run();
         PacketAssemblerSelfTest.run();
         RriBeatsSelfTest.run();
+        LegacySleepNightsSelfTest.run();
 
         System.exit(T.summary());
     }

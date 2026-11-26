@@ -457,7 +457,7 @@ public class MainActivity extends Activity {
         exportSub = ui.row(g, "导出数据", "导出成 JSON 和 CSV（Excel 能打开），只写在手机里",
                 ui.chipButton("导出", v -> exportData()), null);
 
-        ui.row(g, "复制诊断信息", "手环型号、固件、命令表和初始化每一步的结果。别的型号出问题时，把这段发给作者",
+        ui.row(g, "复制诊断信息", "手环型号、固件、命令表、初始化和睡眠同步每一步的结果。别的型号出问题时，把这段发给作者",
                 ui.chipButton("复制", v -> copyDiag()), null);
 
         logToggle = ui.text("展开", 13, ui.t.accent, Ui.MEDIUM);
@@ -536,7 +536,7 @@ public class MainActivity extends Activity {
         } catch (Throwable ignored) { }
     }
 
-    /** 只含 hwinit / hwasync 两类（型号、固件、命令表、每步回没回、手环主动问了什么），没有口令和健康数据 */
+    /** 只含 hwinit / hwasync / hwsleep / hwtru / hwfile（型号、固件、命令表、每步回没回、手环主动问了什么、睡眠同步拉到几段），没有口令；睡眠只有段数和分钟合计 */
     private void copyDiag() {
         StringBuilder sb = new StringBuilder();
         sb.append("手环桥 ").append(BuildInfo.VERSION).append(" · Android ").append(android.os.Build.VERSION.RELEASE)
