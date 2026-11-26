@@ -3,7 +3,7 @@
 **Let your AI read your Huawei band directly. No Huawei Health app, no Huawei ID, no cloud.**
 ([中文](README.md))
 
-> 🧪 **Test release** (currently 0.1.11). The protocol core runs on one HUAWEI Band 10. The app and the MCP
+> 🧪 **Test release** (currently 0.1.12). The protocol core runs on one HUAWEI Band 10. The app and the MCP
 > server are still being checked feature by feature on a real device. Every item below carries an evidence
 > level, and nothing that has not run on a device is called "verified".
 

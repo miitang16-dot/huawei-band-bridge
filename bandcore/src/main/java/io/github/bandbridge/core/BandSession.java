@@ -359,8 +359,38 @@ public final class BandSession {
                 else { wxAckOnly = true; kick.offer(Boolean.TRUE); }
             } else if (svc == 0x25) {                                      // music page
                 onMusicPacket(p);
+            } else {
+                noteUnhandled(svc, cmd, p);
             }
         } catch (Throwable t) { Probe.post("hwasync", "fail | " + t.getClass().getSimpleName() + ":" + t.getMessage()); }
+    }
+
+    private int lastUnhandledKey = -1;
+    private long lastUnhandledAt = 0;
+    private int unhandledRepeats = 0;
+
+    /**
+     * 手环主动发来、我们还不会回的包：记进探针（同一种 10 秒内只记一次，带上重复次数）。
+     * 不同型号会问不同的东西（比如 Band 7 按侧边键弹引导页时手环可能在等手机回某条命令），
+     * 有了这行才知道下一步该回什么。只记服务号 / 命令号和前 24 字节 TLV，不记别的。
+     */
+    private void noteUnhandled(int svc, int cmd, HuaweiPacket p) {
+        int key = (svc << 8) | cmd;
+        long now = System.currentTimeMillis();
+        if (key == lastUnhandledKey && now - lastUnhandledAt < 10000L) { unhandledRepeats++; return; }
+        String more = unhandledRepeats > 0 && lastUnhandledKey >= 0
+                ? " (上一种又来了 " + unhandledRepeats + " 次)" : "";
+        lastUnhandledKey = key; lastUnhandledAt = now; unhandledRepeats = 0;
+        String tlv = "";
+        try {
+            if (p.getTlv() != null) {
+                byte[] b = p.getTlv().serialize();
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < b.length && i < 24; i++) sb.append(String.format("%02x", b[i]));
+                tlv = " tlv=" + sb;
+            }
+        } catch (Throwable ignored) { }
+        Probe.post("hwasync", String.format("unhandled svc=0x%02x cmd=0x%02x%s%s", svc, cmd, tlv, more));
     }
 
     private void sendPkt(HuaweiPacket pk) { try { RequestRunner r = runner; if (r != null && phase == PHASE_READY) r.sendOnly(pk); } catch (Throwable ignored) { } }
