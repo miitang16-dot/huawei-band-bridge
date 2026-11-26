@@ -247,6 +247,10 @@ public final class DeviceInit {
             HuaweiTLV tlv = new HuaweiTLV().put(0x01, (byte) 0x00);   // GB：没账号 ⇒ 0x01=0
             if (expandBit(expand, 0xac)) tlv.put(0x03, (byte) 0x01);  // supportsDiffAccountPairingOptimization
             soft(raw(pp, 0x1A, 0x05, tlv), t, "account");
+        } else if (supports(0x1A, 0x01)) {
+            // 老一点的手环（比如 Band 7）命令表里可能没有 0x1A/0x05，只有老的 SendAccountToDevice 0x1A/0x01。
+            // GB AccountRelated.SendAccountToDevice：没账号 ⇒ 0x01 空值。猜它跟新的那条一样，是「新手机设置」的一步。
+            soft(raw(pp, 0x1A, 0x01, new HuaweiTLV().put(0x01)), t, "account(legacy)");
         }
         if (supports(0x01, 0x31)) soft(new DeviceConfig.SettingRelated.Request(pp), t, "settingrelated");
 
@@ -265,6 +269,9 @@ public final class DeviceInit {
             String loc = lc.getLanguage() + "-" + country.toUpperCase(Locale.ROOT);
             HuaweiTLV tlv = new HuaweiTLV().put(0x01, loc.getBytes(StandardCharsets.UTF_8)).put(0x02, (byte) 0x00);  // 公制
             soft(raw(pp, 0x0C, 0x01, tlv), t, "language " + loc);
+        }
+        if (supports(0x01, 0x32)) {                                   // GB SetTimeZoneIdRequest：时间 + 时区名
+            soft(new DeviceConfig.TimeZoneIdRequest(pp), t, "timezone");
         }
         if (supports(0x01, 0x04)) {
             soft(new DeviceConfig.DateFormat.Request(pp, (byte) DeviceConfig.Date.yearFirst, (byte) DeviceConfig.Time.hours24), t, "dateformat");

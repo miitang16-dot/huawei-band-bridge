@@ -42,6 +42,8 @@ public class BandService extends Service {
     static volatile BandService instance;
 
     static final ArrayDeque<String> LOG = new ArrayDeque<>();
+    /** 初始化 + 手环主动问的东西（hwinit / hwasync），单独留着给「复制诊断信息」用，不会被别的日志挤掉 */
+    static final ArrayDeque<String> DIAG = new ArrayDeque<>();
     static volatile String calib = "";            // calibration progress text for the UI
 
     BandSession session;
@@ -83,6 +85,12 @@ public class BandService extends Service {
             synchronized (LOG) {
                 LOG.addLast(new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT).format(new java.util.Date()) + "  " + kind + " | " + text);
                 while (LOG.size() > 80) LOG.removeFirst();
+            }
+            if ("hwinit".equals(kind) || "hwasync".equals(kind)) {
+                synchronized (DIAG) {
+                    DIAG.addLast(new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT).format(new java.util.Date()) + "  " + kind + " | " + text);
+                    while (DIAG.size() > 150) DIAG.removeFirst();
+                }
             }
             ping();
         });
@@ -214,4 +222,5 @@ public class BandService extends Service {
     }
 
     static List<String> logLines() { synchronized (LOG) { return new ArrayList<>(LOG); } }
+    static List<String> diagLines() { synchronized (DIAG) { return new ArrayList<>(DIAG); } }
 }

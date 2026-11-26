@@ -457,6 +457,9 @@ public class MainActivity extends Activity {
         exportSub = ui.row(g, "导出数据", "导出成 JSON 和 CSV（Excel 能打开），只写在手机里",
                 ui.chipButton("导出", v -> exportData()), null);
 
+        ui.row(g, "复制诊断信息", "手环型号、固件、命令表和初始化每一步的结果。别的型号出问题时，把这段发给作者",
+                ui.chipButton("复制", v -> copyDiag()), null);
+
         logToggle = ui.text("展开", 13, ui.t.accent, Ui.MEDIUM);
         ui.row(g, "日志", "排查问题用，只在内存里，退出就清空", logToggle, v -> {
             logOpen = !logOpen;
@@ -530,6 +533,23 @@ public class MainActivity extends Activity {
                     .put("headers", new JSONObject().put("Authorization", "Bearer " + BandService.token(this)))));
             ((ClipboardManager) getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("mcp", cfg.toString(2)));
             toast("复制好了，里面有口令，只粘到你自己的 AI 客户端");
+        } catch (Throwable ignored) { }
+    }
+
+    /** 只含 hwinit / hwasync 两类（型号、固件、命令表、每步回没回、手环主动问了什么），没有口令和健康数据 */
+    private void copyDiag() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("手环桥 ").append(BuildInfo.VERSION).append(" · Android ").append(android.os.Build.VERSION.RELEASE)
+                .append(" (SDK ").append(android.os.Build.VERSION.SDK_INT).append(")\n");
+        BandService s = BandService.instance;
+        BandSession bs = s == null ? null : s.session;
+        if (bs != null) sb.append("型号 ").append(bs.model()).append(" · 阶段 ").append(bs.phase()).append('\n');
+        List<String> lines = BandService.diagLines();
+        if (lines.isEmpty()) sb.append("（还没有诊断记录：先连上手环再复制）\n");
+        for (String l : lines) sb.append(l).append('\n');
+        try {
+            ((ClipboardManager) getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("diag", sb.toString()));
+            toast("复制好了，里面没有口令和健康数据");
         } catch (Throwable ignored) { }
     }
 
