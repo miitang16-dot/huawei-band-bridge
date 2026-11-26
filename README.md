@@ -58,6 +58,11 @@
 **不是漏掉的心跳**。详见 [`docs/reverse-engineering.md` §4](docs/reverse-engineering.md) 和
 [`docs/lab/hrlive-0x19.md`](docs/lab/hrlive-0x19.md)。
 
+**逐拍回放（下一版，未发）**：既然手环是成批发、延迟几秒，卡片里加了一个回放动画 ——
+每收到一个包，就按这包里的 RRI **一拍一拍地把刚才那几拍演一遍**（`BeatReplay` 排时间表，
+回放上限 4 秒，避免越拖越后）。卡片上写明**「不是『此刻这一拍』」**，它只是让「心跳在跳」看得见，
+不代表实时。动画本身要真机看效果，见 `docs/ROADMAP.md` P0。
+
 ## 下载 / 安装
 
 | 版本 | 文件 | 说明 |
@@ -126,7 +131,8 @@ $env:ANDROID_HOME='C:\path\to\android-sdk'
 .\selftest.ps1                               # 纯协议层离线自测，不需要手环 / Android SDK
 ```
 
-- 离线自测当前 **251 项**，覆盖 TLV / 帧 / CRC / 分片 / 时间换算 / RRI 换算与丢弃分类；
+- 离线自测当前 **298 项**，覆盖 TLV / 帧 / CRC / 分片 / 时间换算 / RRI 换算与丢弃分类 /
+  逐拍回放时间表（`BeatReplay`）；
   测不到什么见 [`docs/TESTING.md`](docs/TESTING.md)。
 - CI：`.github/workflows/build.yml`（push / PR 跑自测 + `assembleDebug`）。自测 job 在 GitHub 上跑通了；
   构建 job 之前卡在安装 Android SDK 那一步，0.1.4 改成用运行环境自带的 SDK。

@@ -24,6 +24,7 @@ import android.widget.Toast;
 
 import io.github.bandbridge.core.BandSession;
 import io.github.bandbridge.core.data.HrLiveSession;
+import io.github.bandbridge.core.proto.hr.BeatReplay;
 
 import org.json.JSONObject;
 
@@ -56,6 +57,9 @@ public class MainActivity extends Activity {
     /* heartbeat live */
     private TextView hrBpm, hrUnit, hrState, hrFoot, hrHelp, hr1Btn, hr3Btn, hrStopBtn;
     private TextView[] hrStat = new TextView[6];
+    private PulseView hrPulse;
+    private TextView hrPulseTxt;
+    private HrLiveSession.Snapshot lastReplaySnap;
     /* features */
     private TextView calibSub, calibBtn, musicSub, musicBtn, bondSub, bondBtn;
     private TextView batterySub, batteryBtn;
@@ -200,6 +204,23 @@ public class MainActivity extends Activity {
         TextView lead = ui.meta("手环一拍一拍推送心跳间隔，换算成心率。比每分钟一格细得多，测的时候戴紧、坐着别说话。");
         lead.setPadding(0, ui.dp(6), 0, 0);
         c.addView(lead);
+
+        /* 逐拍回放：手环是攒几秒成批推送的（真机约 4 秒一包），所以这里是「按包回放」而不是「此刻这一拍」 */
+        LinearLayout pulseRow = new LinearLayout(this);
+        pulseRow.setGravity(Gravity.CENTER_VERTICAL);
+        hrPulse = new PulseView(this, ui.t.accent, ui.t.track, ui.t.faint);
+        pulseRow.addView(hrPulse, new LinearLayout.LayoutParams(ui.dp(56), ui.dp(56)));
+        LinearLayout pulseCol = new LinearLayout(this);
+        pulseCol.setOrientation(LinearLayout.VERTICAL);
+        pulseCol.setPadding(ui.dp(12), 0, 0, 0);
+        pulseCol.addView(ui.text("逐拍回放", 13, ui.t.ink, Ui.MEDIUM));
+        hrPulseTxt = ui.small("测的时候，按包里收到的间隔一拍一拍地跳；不是「此刻这一拍」。");
+        hrPulseTxt.setPadding(0, ui.dp(3), 0, 0);
+        pulseCol.addView(hrPulseTxt);
+        pulseRow.addView(pulseCol, new LinearLayout.LayoutParams(0, -2, 1f));
+        LinearLayout.LayoutParams pulseLp = new LinearLayout.LayoutParams(-1, -2);
+        pulseLp.topMargin = ui.dp(10);
+        c.addView(pulseRow, pulseLp);
 
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(3);
@@ -743,6 +764,7 @@ public class MainActivity extends Activity {
             dimEmptyStats();
             hrFoot.setText(ready ? "点「测 1 分钟」，测完能看到这一分钟里每一拍的心率。" : "");
             hrFoot.setVisibility(ready ? View.VISIBLE : View.GONE);
+            updatePulse(null, false, now);
             return;
         }
         setBpm(sn.bpm);
@@ -770,6 +792,33 @@ public class MainActivity extends Activity {
         if (sn.error != null) foot.add("出错：" + sn.error);
         hrFoot.setText(String.join("\n", foot));
         hrFoot.setVisibility(foot.isEmpty() ? View.GONE : View.VISIBLE);
+        updatePulse(sn, running, now);
+    }
+
+    /**
+     * 心跳回放：每收到一个新包，用这一包收下的 RRI 排一次时间表（{@link BeatReplay}），
+     * 让 {@link PulseView} 按真实间隔一跳一跳地演。**手环是攒几秒成批推送的，所以这是
+     * 「刚才那几拍」的回放，不是「此刻这一拍」** —— 文案上必须说清楚。
+     */
+    private void updatePulse(HrLiveSession.Snapshot sn, boolean running, long now) {
+        if (hrPulse == null) return;
+        if (!running || sn == null) {
+            hrPulse.stop();
+            lastReplaySnap = null;
+            hrPulseTxt.setText("测的时候，按包里收到的间隔一拍一拍地跳；不是「此刻这一拍」。");
+            return;
+        }
+        if (sn == lastReplaySnap) return;             // 同一个包，不重排时间表
+        lastReplaySnap = sn;
+        int[] rris = BeatReplay.capNewest(sn.lastPacketRris, BeatReplay.DEFAULT_HORIZON_MS);
+        if (rris.length == 0) {
+            hrPulseTxt.setText("等下一包心跳数据…");
+            return;
+        }
+        hrPulse.start(BeatReplay.offsetsMs(rris), BeatReplay.bpmPerPulse(rris));
+        String lag = sn.lagMs >= 0 ? oneDp(sn.lagMs / 1000.0) + " 秒" : "?";
+        hrPulseTxt.setText("按这包 " + rris.length + " 个间隔回放 · 这批约 " + lag
+                + " 前收到（不是「此刻这一拍」）");
     }
 
     /** Big number when there is a reading; a quiet「未测量」instead of a lone dash when there is not. */

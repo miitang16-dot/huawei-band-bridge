@@ -1,5 +1,6 @@
 package io.github.bandbridge.core.data;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
@@ -91,6 +92,12 @@ public final class HrLiveSession {
         public final int droppedRange;
         /** 收到几个 0x19/0x05 包。 */
         public final int packets;
+        /**
+         * 最后一个包里**收下**的那些 RRI（毫秒，按到达顺序，已过滤 sqi=0 / 间期离谱）。
+         * 给 UI 做「按包回放」用：手环是攒几秒成批发包的，所以这是「几秒前」的拍，不是此刻。
+         * 没收到过 = 空数组（不会是 null）。
+         */
+        public final int[] lastPacketRris;
         /** 最后一拍的时刻（epoch 毫秒），0 = 还没收到拍。 */
         public final long lastBeatAtMs;
         /** 收到最后一包时的延迟 = 包到达 − 按 RRI 累加出来的最后一拍；-1 = 还没收到包。 */
@@ -107,7 +114,8 @@ public final class HrLiveSession {
 
         Snapshot(boolean running, int plannedSeconds, long startedAtMs, long endedAtMs,
                  int bpm, int bpmAvg, int instantBpm, int beats, int dropped, int droppedSqi0, int droppedRange,
-                 int packets, long lastBeatAtMs, long lagMs, long firstPacketAfterMs, int windowSpanMs,
+                 int packets, int[] lastPacketRris,
+                 long lastBeatAtMs, long lagMs, long firstPacketAfterMs, int windowSpanMs,
                  String endReason, String error) {
             this.running = running;
             this.plannedSeconds = plannedSeconds;
@@ -121,6 +129,7 @@ public final class HrLiveSession {
             this.droppedSqi0 = droppedSqi0;
             this.droppedRange = droppedRange;
             this.packets = packets;
+            this.lastPacketRris = lastPacketRris == null ? new int[0] : lastPacketRris;
             this.lastBeatAtMs = lastBeatAtMs;
             this.lagMs = lagMs;
             this.firstPacketAfterMs = firstPacketAfterMs;
@@ -131,7 +140,7 @@ public final class HrLiveSession {
 
         /** 请求刚发出、测量还没真正开始时的占位快照（别让宿主以为「没在测」）。 */
         public static Snapshot starting(long atMs, int seconds) {
-            return new Snapshot(true, seconds, atMs, 0L, 0, 0, 0, 0, 0, 0, 0, 0, 0L, -1L, -1L, 0, null, null);
+            return new Snapshot(true, seconds, atMs, 0L, 0, 0, 0, 0, 0, 0, 0, 0, new int[0], 0L, -1L, -1L, 0, null, null);
         }
 
         /** 这次测了多久（毫秒）：运行中 = 到现在，结束后 = 实际时长。 */
@@ -189,6 +198,8 @@ public final class HrLiveSession {
     private long firstPacketAfterMs = -1L;
     private long lastLagMs = -1L;
     private int packets;
+    /** 最近一个包里收下的 RRI（毫秒）；给 UI 回放用，worker 写 / UI 读，所以 volatile + 每次新数组。 */
+    private volatile int[] lastPacketRris = new int[0];
 
     /** @param rr 已经认证好的传输（同一个 runner 一次只能有一个消费者，见类注释） */
     public HrLiveSession(RequestRunner rr) { this.rr = rr; }
@@ -366,10 +377,14 @@ public final class HrLiveSession {
 
         long at = System.currentTimeMillis();
         int added = 0;
+        int[] accepted = new int[cs.size()];
         for (HrRriTest.RriData.Response.rriSqiData d : cs) {
             // rri 是 short、sqi 是 byte：两端都按无符号读，别把 >127 的拍读成负数
-            if (beats.add(d.rri & 0xFFFF, d.sqi & 0xFF, at)) added++;
+            int rri = d.rri & 0xFFFF;
+            if (beats.add(rri, d.sqi & 0xFF, at)) accepted[added++] = rri;
         }
+        // 给 UI 的「按包回放」：只留这一包里收下的 RRI（顺序不变）
+        lastPacketRris = added == accepted.length ? accepted : Arrays.copyOf(accepted, added);
         packets++;
         lastLagMs = beats.lagMs(at);
         if (firstPacketAfterMs < 0) {
@@ -395,7 +410,8 @@ public final class HrLiveSession {
         return new Snapshot(isRunning, plannedSeconds, startedAtMs, isRunning ? 0L : endedAtMs,
                 beats.bpm(), beats.avgBpm(), beats.instantBpm(), beats.beats(), beats.dropped(),
                 beats.droppedSqi0(), beats.droppedRange(),
-                packets, beats.lastBeatAtMs(), lastLagMs, firstPacketAfterMs, beats.windowSpanMs(),
+                packets, lastPacketRris,
+                beats.lastBeatAtMs(), lastLagMs, firstPacketAfterMs, beats.windowSpanMs(),
                 reason, error);
     }
 

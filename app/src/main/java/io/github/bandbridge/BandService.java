@@ -86,7 +86,8 @@ public class BandService extends Service {
                 LOG.addLast(new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT).format(new java.util.Date()) + "  " + kind + " | " + text);
                 while (LOG.size() > 80) LOG.removeFirst();
             }
-            if ("hwinit".equals(kind) || "hwasync".equals(kind) || "hwsleep".equals(kind) || "hwtru".equals(kind) || "hwfile".equals(kind)) {
+            if ("hwinit".equals(kind) || "hwasync".equals(kind) || "hwsleep".equals(kind) || "hwtru".equals(kind) || "hwfile".equals(kind)
+                    || "hwlink".equals(kind) || "hwscan".equals(kind)) {   /* ★0.1.14 连接/扫描日志也进「复制诊断信息」*/
                 synchronized (DIAG) {
                     DIAG.addLast(new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT).format(new java.util.Date()) + "  " + kind + " | " + text);
                     while (DIAG.size() > 150) DIAG.removeFirst();

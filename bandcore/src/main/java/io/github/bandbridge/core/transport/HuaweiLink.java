@@ -241,6 +241,8 @@ public final class HuaweiLink {
         try { if (scanner != null) scanner.stopScan(scanCb); } catch (Throwable t) {}
     }
 
+    private int discTries = 0;          /* ★0.1.14 本次连接里 nosvc 重试过几次 */
+
     private void clearPick() {
         pickArmed = false;
         pickId++;
@@ -265,6 +267,23 @@ public final class HuaweiLink {
             }
         } catch (Throwable t) {}
         return false;
+    }
+
+    /* ★0.1.14：日志里必须有【名字】—— Band 11 那台就是靠名字被认出来的，
+       而原来的 cand 行只打个 rssi，事后根本分不清连的到底是手环还是旁边的耳机。 */
+    private static String devName(ScanResult r) {
+        String n = null;
+        try {
+            ScanRecord sr = r.getScanRecord();
+            n = sr == null ? null : sr.getDeviceName();
+        } catch (Throwable t) {}
+        if (n == null) { try { n = r.getDevice().getName(); } catch (Throwable t) { n = null; } }
+        if (n == null) { try { n = r.getDevice().getAddress(); } catch (Throwable t) { n = "?"; } }
+        return n == null ? "?" : n;
+    }
+
+    private static String devName(BluetoothDevice d) {
+        try { String n = d.getName(); return n == null ? "?" : n; } catch (Throwable t) { return "?"; }
     }
 
     private static String advBrief(ScanResult r) {
@@ -312,7 +331,7 @@ public final class HuaweiLink {
             if (bestDev == null) {
                 bestDev = d;
                 bestAddr = addr;
-                report("cand", advBrief(res) + " rssi=" + res.getRssi());
+                report("cand", advBrief(res) + " rssi=" + res.getRssi() + " name=" + devName(res) + " addr=" + addr);
             }
         }
         @Override public void onScanFailed(int code) {
@@ -329,9 +348,13 @@ public final class HuaweiLink {
         stopScan();
         curAddr = addr == null ? "" : addr;
         ready = false;
-        report("pick", why + " " + curAddr);
+        discTries = 0;
+        report("pick", why + " " + curAddr + " name=" + devName(d));
         try {
-            gatt = d.connectGatt(ctx, false, gattCb);     // autoConnect=false：主动连更可控
+            /* ★0.1.14：显式指定 LE。原来这里不传 transport（= AUTO），
+               而自动直连那条路径用的是 TRANSPORT_LE；双模手环 + 系统里有旧配对时
+               AUTO 可能走 BR/EDR ⇒ 服务表空（Band 11 的 n=0 就是这个症状）。 */
+            gatt = d.connectGatt(ctx, false, gattCb, BluetoothDevice.TRANSPORT_LE);     // autoConnect=false：主动连更可控
             if (gatt == null) { lastErr = "gattnull"; retryLater(); }
         } catch (Throwable t) {
             lastErr = "connectx:" + t.getClass().getSimpleName();
@@ -440,7 +463,7 @@ public final class HuaweiLink {
         @Override public void onConnectionStateChange(BluetoothGatt g, int status, int st) {
             if (!want) { try { g.close(); } catch (Throwable t) {} return; }
             if (st == BluetoothProfile.STATE_CONNECTED) {
-                report("connected", "status=" + status + (autoPending ? " via=auto" : ""));
+                report("connected", "status=" + status + (autoPending ? " via=auto" : "") + " name=" + (g.getDevice() == null ? "?" : devName(g.getDevice())));
                 autoPending = false;                    // 自动直连建链成功 ⇒ 后面与扫描连上的完全一样
                 autoToken++;
                 final int myId = ++pickId;
@@ -486,7 +509,19 @@ public final class HuaweiLink {
                 if (status != BluetoothGatt.GATT_SUCCESS) { fail("disc" + status); return; }
 
                 BluetoothGattService svc = g.getService(SVC_HUAWEI);
-                if (svc == null) { fail("nosvc"); return; }
+                if (svc == null) {
+                    /* ★0.1.14：第一次 nosvc 先重试一次服务发现再放弃。
+                       Band 11 实测 disc status=0 n=0（一个服务都没有）——可能是连上仅 320ms
+                       就 discoverServices，表还没就绪。只重试一次，仍有问题就如实 fail，
+                       不掩盖真故障 ✓ */
+                    if (discTries < 1) {
+                        discTries++;
+                        report("nosvc-retry", "n=" + (svcs == null ? -1 : svcs.size()));
+                        try { g.discoverServices(); } catch (Throwable t) {}
+                        return;
+                    }
+                    fail("nosvc"); return;
+                }
                 writeChr = svc.getCharacteristic(CHR_WRITE);
                 BluetoothGattCharacteristic notifyChr = svc.getCharacteristic(CHR_NOTIFY);
                 if (writeChr == null)   { fail("nowrite"); return; }

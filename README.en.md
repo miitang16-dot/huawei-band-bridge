@@ -62,6 +62,12 @@ not each beat as it happens. The earlier 0 ms runs did not record packet counts 
 real-time delivery. "Discarded" means samples the band itself flagged as invalid (all 352 in the third run were `sqi=0`);
 these are **not missed heartbeats**. See [`docs/lab/hrlive-0x19.md`](docs/lab/hrlive-0x19.md).
 
+**Beat-by-beat replay (next build, unreleased).** Because the band pushes in batches, the heartbeat card now has a
+replay animation: whenever a packet arrives, the RRI values in that packet are replayed one pulse at a time
+(`BeatReplay` builds the schedule, capped at 4 s so it cannot drift). The card says **"not this very beat right now"** —
+the animation only makes the heartbeat visible; it is not real time. The animation itself still needs a real-device look
+(see `docs/ROADMAP.md`, P0).
+
 ## Install
 
 Download the newest APK from [Releases](https://github.com/miitang16-dot/huawei-band-bridge/releases)
@@ -120,7 +126,7 @@ $env:ANDROID_HOME='C:\path\to\android-sdk'
 .\selftest.ps1                               # offline protocol self-test, no band or Android SDK needed
 ```
 
-- The offline self-test has **251 checks**: TLV, frames, CRC, slicing, time conversion, RRI conversion and the discard categories.
+- The offline self-test has **298 checks**: TLV, frames, CRC, slicing, time conversion, RRI conversion, the discard categories, and the beat-replay schedule (`BeatReplay`).
   What it cannot cover is listed in [`docs/TESTING.md`](docs/TESTING.md).
 - CI: `.github/workflows/build.yml` runs the self-test and `assembleDebug` on push and PR.
 

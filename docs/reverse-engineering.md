@@ -172,6 +172,9 @@ magic 0x5A | length | serviceId | commandId | TLV payload ... | CRC16
 - 脏拍过滤：`sqi=0`、`rri < 250 ms`、`rri > 3000 ms` 丢掉（分两类计数）。
 - 三个口径：当前（10 秒滑动窗）/ 整段平均 / 只看最后一拍。
 - 纯逻辑抽在 `proto/hr/RriBeats`（离线自测覆盖：间期→心率、时间累加、窗口收缩、脏拍过滤、丢弃分类）。
+- 逐拍回放在 `proto/hr/BeatReplay` 里：一包 RRI → 每一拍的相对时刻（第 i 拍用第 i 个间期）、
+  每拍心率、以及 `capNewest`（只留最近几拍，回放上限 4 秒，避免成批推送下越排越后）。
+  App 的 `PulseView` 只负责按这张表闪；卡片文案写明**「不是『此刻这一拍』」**。
 
 ## 5. 逆向出来的边界（坑都在这儿）
 
@@ -205,7 +208,7 @@ magic 0x5A | length | serviceId | commandId | TLV payload ... | CRC16
 ```
 bandcore/                   可复用的协议库（无 UI、无 app 依赖；只有 BLE 传输层需要 Context）
   transport/                HuaweiLink（扫描/连接/写队列/重连）、PacketAssembler、RequestRunner
-  proto/                    帧、TLV、加密、CRC、时间换算、各 service 报文；hr/RriBeats 纯换算
+  proto/                    帧、TLV、加密、CRC、时间换算、各 service 报文；hr/RriBeats 纯换算、hr/BeatReplay 回放排程
   auth/                     AuthFlow（状态机）、AuthState（本机身份）、HiChainPakeUtils（PAKE 移植）
   data/                     DeviceInit、各种 Sync、Store、HrLiveSession、Probe
 app/                        参考实现 App（UI + 前台服务 + 手机上的 MCP 服务）
@@ -221,8 +224,9 @@ app/                        参考实现 App（UI + 前台服务 + 手机上的 
 - GATT / 协议实测记录：[`docs/lab/hrlive-0x19.md`](lab/hrlive-0x19.md)（`0x19` 的完整实验笔记）
 - 探针实现：`bandcore/.../Probe.java`（`hwauth` / `hwinit` / `hwsync` / `hwlive`）
 - 逐拍心率：`bandcore/data/HrLiveSession.java` + `bandcore/proto/hr/RriBeats.java`
+  逐拍回放：`bandcore/proto/hr/BeatReplay.java` + `app/PulseView.java`
 - 压力校准（`0x19` 的原始用法）：`bandcore/data/StressSync.java`
 - 分钟数据 / TruSleep / 情绪 / 天气 / 音乐：`bandcore/data/*Sync.java`、`bandcore/proto/packets/`
 - 认证：`bandcore/auth/{AuthFlow,HiChainPakeUtils,AuthState}.java`、`bandcore/proto/HuaweiCrypto.java`
 - 帧：`bandcore/proto/{HuaweiPacket,HuaweiTLV,CheckSums,HuaweiUtil}.java`
-- 离线自测：`bandcore/src/test/` + `selftest.sh`（251 项）
+- 离线自测：`bandcore/src/test/` + `selftest.sh`（298 项）
