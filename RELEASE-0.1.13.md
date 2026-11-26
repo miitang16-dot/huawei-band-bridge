@@ -7,10 +7,10 @@
 | 版本 | `0.1.13`（versionCode 14） |
 | 包名 | `io.github.bandbridge` |
 | 文件 | [`dist/huawei-band-bridge-0.1.13-debug.apk`](dist/huawei-band-bridge-0.1.13-debug.apk) |
-| 大小 | @@SIZE@@ 字节 |
-| MD5 | `@@MD5@@` |
-| SHA-256 | `@@SHA256@@` |
-| 签名 | Android **debug** 签名（和 0.1.x 各版相同，可以覆盖安装） |
+| 大小 | 311709 字节 |
+| MD5 | `319576D9A308F490CDFF094146633A01` |
+| SHA-256 | `45151092A1503CE934C08FDA6719D05D7E55308DAE58B6072C0960E30BA00203` |
+| 签名 | Android **debug** 签名，证书 SHA-256 `70125c59…2053a0b`（和 0.1.12 相同，可以覆盖安装） |
 | 系统要求 | Android 8.0+（minSdk 26），`targetSdk 35`，`compileSdk 36` |
 
 ## 改了什么
