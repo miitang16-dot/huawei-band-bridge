@@ -12,6 +12,7 @@ import io.github.bandbridge.core.data.DictSync;
 import io.github.bandbridge.core.data.FeatureUpload;
 import io.github.bandbridge.core.data.HrLiveSession;
 import io.github.bandbridge.core.data.SampleStore;
+import io.github.bandbridge.core.data.SleepSync;
 import io.github.bandbridge.core.data.StepSync;
 import io.github.bandbridge.core.data.StressSync;
 import io.github.bandbridge.core.data.TruSleepStore;
@@ -19,6 +20,8 @@ import io.github.bandbridge.core.data.TruSleepSync;
 import io.github.bandbridge.core.data.WeatherSync;
 import io.github.bandbridge.core.proto.HuaweiPacket;
 import io.github.bandbridge.core.proto.HuaweiStressParser;
+import io.github.bandbridge.core.proto.HuaweiTLV;
+import io.github.bandbridge.core.proto.LegacySleepNights;
 import io.github.bandbridge.core.proto.packets.DataSync;
 import io.github.bandbridge.core.proto.packets.DeviceConfig;
 import io.github.bandbridge.core.proto.packets.HuaweiDataSyncCommon;
@@ -29,6 +32,7 @@ import io.github.bandbridge.core.transport.RequestRunner;
 
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -347,6 +351,14 @@ public final class BandSession {
                 HuaweiLink l = link;
                 if (!r.isAck && l != null && r.info != null)
                     for (byte[] s : new DeviceConfig.PhoneInfo.Request(a.getParamsProvider(), r.info).serialize()) l.send(s);
+            } else if (svc == 0x32 && cmd == 0x02) {                       // 生理期「改时间」：GB 回一个错误码 0x249F1（我们不管生理期）
+                HuaweiPacket r = new HuaweiPacket(a.getParamsProvider());
+                r.serviceId = 0x32; r.commandId = 0x02;
+                r.setTlv(new HuaweiTLV().put(0x7f, 0x249F1));
+                r.complete = true;
+                HuaweiLink l = link;
+                if (l != null) for (byte[] s : r.serialize()) l.send(s);
+                Probe.post("hwasync", "menstrual modifyTime | answered");
             } else if (svc == 0x37 && cmd == 0x04) {                       // "new emotion data available"
                 dictKick = true; kick.offer(Boolean.TRUE);
             } else if (p instanceof DataSync.ConfigCommand.Response) {     // featureManager asks for the feature list
@@ -480,7 +492,19 @@ public final class BandSession {
             if (di != null && System.currentTimeMillis() - lastTruAt > 30 * 60000L) {
                 long lw = truSleep.lastWakeSec();
                 long tFrom = lw > 0 ? Math.max(lw - 12 * 3600, now - 10 * 86400L) : now - 3 * 86400L;
-                List<JSONObject> nights = new TruSleepSync(rr).run((int) tFrom, (int) now, di.expand);
+                List<JSONObject> nights;
+                if (xbit(di.expand, 143)) {
+                    nights = new TruSleepSync(rr).run((int) tFrom, (int) now, di.expand);
+                } else {
+                    /* 老款手环（Band 7 等）没有字典式科学睡眠（扩展能力第 143 位）⇒ 走 GB 一直会拉的基础睡眠
+                       0x07/0x0C → 0x07/0x0D（浅睡 / 深睡段），拼成一晚一晚，形状跟 TruSleep 一样 */
+                    List<LegacySleepNights.Seg> segs = new ArrayList<>();
+                    for (SleepSync.Seg g : new SleepSync(rr).run((int) tFrom, (int) now))
+                        segs.add(new LegacySleepNights.Seg(g.start, g.end, g.type));
+                    try { nights = LegacySleepNights.build(segs); }
+                    catch (Throwable t) { nights = new ArrayList<>(); Probe.post("hwsleep", "build fail | " + t); }
+                    Probe.post("hwsleep", "nights | " + nights.size());
+                }
                 if (myGen != gen) return;
                 truSleep.merge(nights);
                 lastTruAt = System.currentTimeMillis();
