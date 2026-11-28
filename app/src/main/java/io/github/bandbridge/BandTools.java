@@ -37,7 +37,10 @@ final class BandTools {
                         .put("from", str("Optional HH:MM start (local time)"))
                         .put("to", str("Optional HH:MM end (local time)"))));
         a.put(tool("band_sleep", "TruSleep for the night that ended on the given date: fall asleep / wake time, score, minutes of deep / light / REM / awake, "
-                + "wake-ups, sleep heart rate and SpO2, and the stage timeline. Naps that ended the same day are listed separately (naps / napMin; dayTotalMin = night + naps).",
+                + "wake-ups, sleep heart rate and SpO2, and the stage timeline. Naps that ended the same day are listed separately (naps / napMin; dayTotalMin = night + naps). "
+                + "sleepHr / sleepSpo come from the band's sleep summary (0 = the band did not give it); sleepHrMinute / sleepSpoMinute / hrCurve are computed from the "
+                + "per-minute samples between falling asleep and waking (min with time, avg, max; 15-minute HR curve). The band's own screen may show an instantaneous "
+                + "minimum 1-3 bpm lower. Per-minute data is kept 10 days, so older nights have null there.",
                 props().put("date", str("YYYY-MM-DD of the wake-up day, default today"))));
         a.put(tool("band_stress", "Stress scores the band measured on a day (1-99: 1-29 relaxed, 30-59 normal, 60-79 medium, 80-99 high). "
                 + "Needs a one-time calibration in the app.",
@@ -229,7 +232,46 @@ final class BandTools {
             tl.put(new JSONObject().put("t", hhmm(rr.getLong(0))).put("min", rr.getInt(1)).put("stage", code >= 1 && code <= 4 ? names[code] : String.valueOf(code)));
         }
         o.put("timeline", tl);
+        sleepVitals(o, best.optLong("fall"), best.optLong("wake"));
         return o;
+    }
+
+    /**
+     * Heart rate / SpO2 while asleep, computed from the per-minute samples between fall-asleep and wake-up.
+     * The TruSleep summary sometimes leaves min HR empty; these fill the gap. Per-minute samples are kept 10 days,
+     * so older nights get null here. sleepHrMinute: {min, minAt, avg, max, maxAt, n}; sleepSpoMinute: {min, minAt, avg, n};
+     * hrCurve: 15-minute averages [{t, hr}].
+     */
+    private void sleepVitals(JSONObject o, long fallMs, long wakeMs) throws Exception {
+        o.put("sleepHrMinute", JSONObject.NULL).put("sleepSpoMinute", JSONObject.NULL).put("hrCurve", new JSONArray());
+        if (fallMs <= 0 || wakeMs <= fallMs) return;
+        JSONObject r = s.samples().query(fallMs / 1000L, wakeMs / 1000L);
+        JSONArray t = r.optJSONArray("t"), hr = r.optJSONArray("hr"), spo = r.optJSONArray("spo");
+        if (t == null || t.length() == 0) return;
+        int hMin = 0, hMax = 0, hN = 0, sMin = 0, sN = 0; long hSum = 0, sSum = 0, hMinAt = 0, hMaxAt = 0, sMinAt = 0;
+        long span = 15 * 60_000L;
+        java.util.TreeMap<Long, long[]> buckets = new java.util.TreeMap<>();
+        for (int i = 0; i < t.length(); i++) {
+            long ts = t.optLong(i);
+            int h = hr.optInt(i), sp = spo.optInt(i);
+            if (h > 0) {
+                hSum += h; hN++;
+                if (hMin == 0 || h < hMin) { hMin = h; hMinAt = ts; }
+                if (h > hMax) { hMax = h; hMaxAt = ts; }
+                long k = fallMs + ((ts - fallMs) / span) * span;
+                long[] b = buckets.get(k); if (b == null) { b = new long[2]; buckets.put(k, b); }
+                b[0] += h; b[1]++;
+            }
+            if (sp > 0) { sSum += sp; sN++; if (sMin == 0 || sp < sMin) { sMin = sp; sMinAt = ts; } }
+        }
+        if (hN > 0) o.put("sleepHrMinute", new JSONObject().put("min", hMin).put("minAt", hhmm(hMinAt))
+                .put("avg", Math.round((float) hSum / hN)).put("max", hMax).put("maxAt", hhmm(hMaxAt)).put("n", hN));
+        if (sN > 0) o.put("sleepSpoMinute", new JSONObject().put("min", sMin).put("minAt", hhmm(sMinAt))
+                .put("avg", Math.round((float) sSum / sN)).put("n", sN));
+        JSONArray curve = new JSONArray();
+        for (java.util.Map.Entry<Long, long[]> e : buckets.entrySet())
+            curve.put(new JSONObject().put("t", hhmm(e.getKey())).put("hr", Math.round((float) e.getValue()[0] / e.getValue()[1])));
+        o.put("hrCurve", curve);
     }
 
     private JSONObject stress(String date) throws Exception {
