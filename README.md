@@ -3,7 +3,7 @@
 **让 AI 直接读你的华为手环。不用华为运动健康，不用华为账号，数据不上任何云。**
 *Let your AI read your Huawei band directly: no Huawei Health app, no Huawei ID, no cloud.*（[English](README.en.md)）
 
-> 🧪 **测试版**（当前 0.1.14）。协议核心在一台 HUAWEI Band 10 上跑通了，App 和 MCP 服务还在逐项上真机验证。
+> 🧪 **测试版**（当前 0.1.15）。协议核心在一台 HUAWEI Band 10 上跑通了，App 和 MCP 服务还在逐项上真机验证。
 > 下面每一项都标了证据等级，没在真机上验过的不会写成「已验证」。
 
 <img src="docs/screenshots/main-heart-rate.jpg" width="320" alt="手环桥 0.1.1 主界面：连接状态和心跳直播的逐拍读数">
@@ -67,7 +67,8 @@
 
 | 版本 | 文件 | 说明 |
 |---|---|---|
-| `0.1.14`（2026-11-26） | [`dist/huawei-band-bridge-0.1.14-debug.apk`](dist/huawei-band-bridge-0.1.14-debug.apk) | **推荐**。Band 11 诊断版（连接日志带设备名/地址、复制诊断信息含 hwlink、LE transport、nosvc 重试）；心跳逐拍回放动画（真机未验证） |
+| `0.1.15`（2026-11-28） | [`dist/huawei-band-bridge-0.1.15-debug.apk`](dist/huawei-band-bridge-0.1.15-debug.apk) | **推荐**。`band_sleep` 补睡眠期间心率 / 血氧（最低和几点、平均、最高）和整晚心率曲线，按每分钟数据算 |
+| `0.1.14`（2026-11-26） | [`dist/huawei-band-bridge-0.1.14-debug.apk`](dist/huawei-band-bridge-0.1.14-debug.apk) | Band 11 诊断版（连接日志带设备名/地址、复制诊断信息含 hwlink、LE transport、nosvc 重试）；心跳逐拍回放动画（真机未验证） |
 | `0.1.13`（2026-11-26） | [`dist/huawei-band-bridge-0.1.13-debug.apk`](dist/huawei-band-bridge-0.1.13-debug.apk) | Band 7 等老款手环的睡眠能同步了（基础睡眠：浅 / 深 / 醒）；回答生理期请求 |
 | `0.1.12`（2026-11-26） | [`dist/huawei-band-bridge-0.1.12-debug.apk`](dist/huawei-band-bridge-0.1.12-debug.apk) | 加「复制诊断信息」；补时区和老款账号命令（为 Band 7 排查引导页） |
 | `0.1.11`（2026-11-25） | [`dist/huawei-band-bridge-0.1.11-debug.apk`](dist/huawei-band-bridge-0.1.11-debug.apk) | 修：白天小睡顶掉夜里那一觉（健康页和 `band_sleep`）；小睡算进总睡眠 |
