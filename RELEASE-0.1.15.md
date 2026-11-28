@@ -7,9 +7,9 @@ AI 问「昨晚睡着时心率最低是多少」时，手环的科学睡眠摘�
 | 版本 | `0.1.15`（versionCode 16） |
 | 包名 | `io.github.bandbridge` |
 | 文件 | [`dist/huawei-band-bridge-0.1.15-debug.apk`](dist/huawei-band-bridge-0.1.15-debug.apk)（下面附件里也有） |
-| 大小 | @@SIZE@@ 字节 |
-| MD5 | `@@MD5@@` |
-| SHA-256 | `@@SHA256@@` |
+| 大小 | 316665 字节 |
+| MD5 | `085CF1280981CD90F6FB322EF4AF7E51` |
+| SHA-256 | `2FD62A648AB3B99F51EB7C1EAAC5FAF5995BA88F9412F1FF83C7F74ECB89701F` |
 | 签名 | Android **debug** 签名（证书与 0.1.0~0.1.14 相同，可以覆盖安装） |
 | 系统要求 | Android 8.0+（minSdk 26），`targetSdk 35`，`compileSdk 36` |
 
